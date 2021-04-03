@@ -41,5 +41,5 @@ class Subscriber():
 
 
 s = Subscriber()
-s.resubscribe()
-#s.run()
+#s.resubscribe()
+s.run()

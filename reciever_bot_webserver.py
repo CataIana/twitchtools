@@ -16,7 +16,7 @@ class RecieverWebServer():
         return self.web_server
 
     async def _reciever(self, request):
-        self.bot.wait_until_ready()
+        await self.bot.wait_until_ready()
         channel = request.match_info["channel"]
         self.bot.log.info(f"{request.method} from {channel}")
         if request.method == 'POST':
@@ -102,16 +102,6 @@ class RecieverWebServer():
             if live:
                 if notif_info["game_name"] == "":
                     notif_info["game_name"] = "<no game>"
-
-                if "webhook" in callbacks[channel].keys():
-                    if "format" in callbacks[channel].keys(): format_ = callbacks[channel]["format"].format(**notif_info).replace("\\n", "\n")
-                    else: format_ = "{user_name} is live! Playing {game_name}!\nhttps://twitch.tv/{user_name}".format(**notif_info)
-                    data = {"content": format_}
-                    if type(callbacks[channel]["webhook"]) == list:
-                        for webhook in callbacks[channel]["webhook"]:
-                            self.bot.rSession.post(webhook, data=data)
-                    else:
-                        self.bot.rSession.post(callbacks[channel]["webhook"], data=data)
                 await self.bot.streamer_online(channel, notif_info)
             else:
                 await self.bot.streamer_offline(channel)
