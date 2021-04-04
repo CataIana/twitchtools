@@ -1,4 +1,4 @@
-from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter
+from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden
 from aiohttp import ClientSession
 from discord.ext import commands
 from systemd.daemon import notify, Notification
@@ -180,19 +180,26 @@ class TwitchCallBackBot(commands.Bot):
             #Add channel to live alert list
             if alert_info["mode"] == 0:
                 channel = await guild.create_text_channel(f"🔴{streamer}")
-                await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
-                await channel.set_permissions(self.user, overwrite=SelfOverride)
-                if alert_info["role_id"] != "everyone":
-                    await channel.set_permissions(guild.default_role, overwrite=DefaultRole)
-                if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
-                    await channel.set_permissions(role, overwrite=OverrideRole)
-                await channel.edit(position=0, category=None)
-                live_channels.append(channel.id)
+                if channel is not None:
+                    try:
+                        await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
+                        await channel.set_permissions(self.user, overwrite=SelfOverride)
+                        if alert_info["role_id"] != "everyone":
+                            await channel.set_permissions(guild.default_role, overwrite=DefaultRole)
+                        if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
+                            await channel.set_permissions(role, overwrite=OverrideRole)
+                        await channel.edit(position=0, category=None)
+                        live_channels.append(channel.id)
+                    except Forbidden:
+                        pass
             elif alert_info["mode"] == 2:
                 channel = self.get_channel(alert_info["channel_id"])
-                await channel.edit(name="🔴now-live")
-                live_channels.append(channel.id)
-
+                if channel is not None:
+                    try:
+                        await channel.edit(name="🔴now-live")
+                        live_channels.append(channel.id)
+                    except Forbidden:
+                        pass
         channel_cache[streamer] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
         with open("channelcache.cache", "w") as f:
             f.write(json.dumps(channel_cache, indent=4))
