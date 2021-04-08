@@ -4,6 +4,7 @@ from json import loads as j_loadstr
 from json import dumps as j_print
 import random
 from string import ascii_letters
+from requests import post
 
 #Credit to GTBebbo on stackoverflow https://stackoverflow.com/questions/61288221/move-the-cursor-back-for-taking-input-python
 def unix_getch():
@@ -73,11 +74,11 @@ while run:
         callbacks = {}
     try:
         with open("auth.json") as f:
-            client_id = j_load(f)["client_id"]
+            auth = j_load(f)
     except FileNotFoundError:
         raise TypeError("No Client ID file provided")
     username = get_input("Provide a twitch channel name: ")
-    json_obj = get(url=f"https://api.twitch.tv/kraken/users?login={username}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": client_id}).json()
+    json_obj = get(url=f"https://api.twitch.tv/kraken/users?login={username}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": auth["client_id"]}).json()
     if "error" in json_obj.keys():
         raise TypeError(f"Error {json_obj['error']}: {json_obj['message']}")
     if json_obj["users"] == []:
@@ -87,4 +88,15 @@ while run:
     callbacks[user["name"].lower()] = {"channel_id": user["_id"], "secret": random_string_generator(21)}
     with open("callbacks.json", "w") as f:
         f.write(j_print(callbacks, indent=4))
+    print("Running subscription post")
+    channel = callbacks[user["name"].lower()]
+    response = post("https://api.twitch.tv/helix/webhooks/hub",
+                data={
+                    "hub.callback": f"https://twitch-callback.catalana.dev/callback/{user['name'].lower()}",
+                    "hub.mode": "subscribe",
+                    "hub.topic": f"https://api.twitch.tv/helix/streams?user_id={channel['channel_id']}",
+                    "hub.lease_seconds": "691200",
+                    "hub.secret": channel["secret"]
+                }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-Id": auth["client_id"]})
+    print(f"Response for {callbacks[user['name']]}: {response}")
     print("Done")
