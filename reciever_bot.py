@@ -1,6 +1,7 @@
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden
 from aiohttp import ClientSession
-from discord.ext import commands
+from discord.errors import HTTPException
+from discord.ext import commands, tasks
 from systemd.daemon import notify, Notification
 from requests import Session
 from asyncio import sleep
@@ -11,6 +12,7 @@ from systemd.journal import JournaldLogHandler
 import logging
 from time import time
 from reciever_bot_webserver import RecieverWebServer
+
 
 
 class TwitchCallBackBot(commands.Bot):
@@ -39,7 +41,6 @@ class TwitchCallBackBot(commands.Bot):
         
         self.load_extension(f'reciever_bot_cogs')
         self.colour = Colour.from_rgb(128, 0, 128)
-        self.rSession = Session()
         with open("auth.json") as f:
             self.auth = json.load(f)
         self.token = self.auth["bot_token"]
@@ -64,7 +65,8 @@ class TwitchCallBackBot(commands.Bot):
             callback_info = json.load(f)
         for streamer in callback_info.keys():
             await sleep(0.2)
-            response = self.rSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {auth['oauth']}", "Client-Id": auth["client_id"]}).json()
+            async with ClientSession() as session:
+                response = await (await session.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {auth['oauth']}", "Client-Id": auth["client_id"]})).json()
             if response["data"] == []:
                 await self.streamer_offline(streamer)
             else:
@@ -105,11 +107,14 @@ class TwitchCallBackBot(commands.Bot):
                         except IndexError:
                             pass
                         else:
-                            embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]}"
-                            await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
-                del channel_cache[streamer]["live_channels"]
-                del channel_cache[streamer]["live_alerts"]
+                            try:
+                                embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
+                                embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]}"
+                                await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
+                            except IndexError:
+                                self.log.warning(f"Error editing message to offline in {channel.guild.name}")
+            del channel_cache[streamer]["live_channels"]
+            del channel_cache[streamer]["live_alerts"]
             with open("channelcache.cache", "w") as f:
                 f.write(json.dumps(channel_cache, indent=4))
 
@@ -191,7 +196,9 @@ class TwitchCallBackBot(commands.Bot):
                         await channel.edit(position=0, category=None)
                         live_channels.append(channel.id)
                     except Forbidden:
-                        pass
+                        self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
+                else:
+                    self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
             elif alert_info["mode"] == 2:
                 channel = self.get_channel(alert_info["channel_id"])
                 if channel is not None:
@@ -199,11 +206,13 @@ class TwitchCallBackBot(commands.Bot):
                         await channel.edit(name="🔴now-live")
                         live_channels.append(channel.id)
                     except Forbidden:
-                        pass
+                        self.log.warning(f"Forbidden error updating {streamer} in guild {channel.guild.name}")
+                else:
+                    self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
         channel_cache[streamer] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
         with open("channelcache.cache", "w") as f:
             f.write(json.dumps(channel_cache, indent=4))
-            
+
 
 bot = TwitchCallBackBot()
 bot.run(bot.token)
