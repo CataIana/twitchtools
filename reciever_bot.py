@@ -1,4 +1,4 @@
-from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden
+from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden, Activity, ActivityType
 from aiohttp import ClientSession
 from discord.errors import HTTPException
 from discord.ext import commands, tasks
@@ -48,12 +48,14 @@ class TwitchCallBackBot(commands.Bot):
 
     async def close(self):
         notify(Notification.STOPPING)
+        self.log.info("Shutting down...")
         await super().close()
 
     @commands.Cog.listener()
     async def on_ready(self):
         await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
+        await self.change_presence(activity=Activity(type=ActivityType.listening, name="to stream status"))
         notify(Notification.READY)
 
     async def on_message(self, message): return
