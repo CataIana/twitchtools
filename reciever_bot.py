@@ -1,9 +1,8 @@
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden, Activity, ActivityType
 from aiohttp import ClientSession
-from discord.errors import HTTPException
 from discord.ext import commands, tasks
 from systemd.daemon import notify, Notification
-from requests import Session
+from aiohttp import ClientSession
 from asyncio import sleep
 import json
 from datetime import datetime
@@ -48,11 +47,13 @@ class TwitchCallBackBot(commands.Bot):
 
     async def close(self):
         notify(Notification.STOPPING)
+        await self.aSession.close()
         self.log.info("Shutting down...")
         await super().close()
 
     @commands.Cog.listener()
     async def on_ready(self):
+        self.aSession = ClientSession()
         await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
         await self.change_presence(activity=Activity(type=ActivityType.listening, name="to stream status"))
@@ -61,14 +62,11 @@ class TwitchCallBackBot(commands.Bot):
     async def on_message(self, message): return
 
     async def catchup_streamers(self):
-        with open("auth.json") as f:
-            auth = json.load(f)
         with open("callbacks.json") as f:
             callback_info = json.load(f)
         for streamer in callback_info.keys():
             await sleep(0.2)
-            async with ClientSession() as session:
-                response = await (await session.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {auth['oauth']}", "Client-Id": auth["client_id"]})).json()
+            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {self.bot.auth['oauth']}", "Client-Id": self.bot.auth["client_id"]})).json()
             if response["data"] == []:
                 await self.streamer_offline(streamer)
             else:
@@ -89,14 +87,20 @@ class TwitchCallBackBot(commands.Bot):
             if channel_cache[streamer].get("live_channels", None) is None or channel_cache[streamer].get("live_alerts", None) is None:
                 return
             self.log.info(f"Updating status to offline for {streamer}")
-            for channel_id in channel_cache[streamer]["live_channels"]:
+            do = False
+            for channel_id in channel_cache[streamer].get("live_channels", []):
+                do = True
                 channel = self.get_channel(channel_id)
                 if channel is not None:
                     if callback_info[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
                         await channel.delete()
                     elif callback_info[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         await channel.edit(name="stream-offline")
-            for alert_ids in channel_cache[streamer]["live_alerts"]:
+            if do:
+                del channel_cache[streamer]["live_channels"]
+            do = False
+            for alert_ids in channel_cache[streamer].get("live_alerts", []):
+                do = True
                 channel = self.get_channel(alert_ids["channel"])
                 if channel is not None:
                     try:
@@ -115,8 +119,8 @@ class TwitchCallBackBot(commands.Bot):
                                 await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
                             except IndexError:
                                 self.log.warning(f"Error editing message to offline in {channel.guild.name}")
-            del channel_cache[streamer]["live_channels"]
-            del channel_cache[streamer]["live_alerts"]
+            if do:
+                del channel_cache[streamer]["live_alerts"]
             with open("channelcache.cache", "w") as f:
                 f.write(json.dumps(channel_cache, indent=4))
 
@@ -144,14 +148,13 @@ class TwitchCallBackBot(commands.Bot):
                 format_ = callback_info[streamer]["format"].format(**stream_info).replace("\\n", "\n")
             else:
                 format_ = "{user_name} is live! Playing {game_name}!\nhttps://twitch.tv/{user_name}".format(**stream_info)
-            async with ClientSession() as session:
-                if type(callback_info[streamer]["webhook"]) == list:
-                    for webhook in callback_info[streamer]["webhook"]:
-                        webhook_obj = Webhook.from_url(webhook, adapter=AsyncWebhookAdapter(session))
-                        await webhook_obj.send(content=format_)
-                else:
-                    webhook = Webhook.from_url(callback_info[streamer]["webhook"], adapter=AsyncWebhookAdapter(session))
-                    await webhook.send(content=format_)
+            if type(callback_info[streamer]["webhook"]) == list:
+                for webhook in callback_info[streamer]["webhook"]:
+                    webhook_obj = Webhook.from_url(webhook, adapter=AsyncWebhookAdapter(self.aSession))
+                    await webhook_obj.send(content=format_)
+            else:
+                webhook = Webhook.from_url(callback_info[streamer]["webhook"], adapter=AsyncWebhookAdapter(self.aSession))
+                await webhook.send(content=format_)
         #Send live alert message
         embed = Embed(
             title=stream_info["title"], url=f"https://twitch.tv/{stream_info['user_login']}",
@@ -172,7 +175,7 @@ class TwitchCallBackBot(commands.Bot):
         for guild_id, alert_info in callback_info[streamer]["alert_roles"].items():
             guild = self.get_guild(int(guild_id))
             if alert_info["role_id"] == "everyone":
-                role_mention = guild.default_role
+                role_mention = f" {guild.default_role}"
             elif alert_info["role_id"] == None:
                 role_mention = ""
             else:
@@ -186,16 +189,16 @@ class TwitchCallBackBot(commands.Bot):
                 pass
             #Add channel to live alert list
             if alert_info["mode"] == 0:
-                channel = await guild.create_text_channel(f"🔴{streamer}")
+                NewChannelOverrides = {self.user: SelfOverride}
+                if alert_info["role_id"] != "everyone":
+                    NewChannelOverrides[guild.default_role] = DefaultRole
+                if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
+                    NewChannelOverrides[role] = OverrideRole
+
+                channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
                 if channel is not None:
                     try:
                         await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
-                        await channel.set_permissions(self.user, overwrite=SelfOverride)
-                        if alert_info["role_id"] != "everyone":
-                            await channel.set_permissions(guild.default_role, overwrite=DefaultRole)
-                        if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
-                            await channel.set_permissions(role, overwrite=OverrideRole)
-                        await channel.edit(position=0, category=None)
                         live_channels.append(channel.id)
                     except Forbidden:
                         self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
