@@ -19,7 +19,7 @@ class TwitchCallBackBot(commands.Bot):
         intents = Intents.none()
         intents.guilds = True
         intents.messages = True
-        super().__init__(command_prefix="t!", case_insensitive=True, intents=intents, help_command=None)
+        super().__init__(command_prefix="t!", case_insensitive=True, intents=intents)
 
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
@@ -56,7 +56,7 @@ class TwitchCallBackBot(commands.Bot):
         self.aSession = ClientSession()
         await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
-        await self.change_presence(activity=Activity(type=ActivityType.listening, name="to stream status"))
+        await self.change_presence(activity=Activity(type=ActivityType.listening, name="stream status"))
         notify(Notification.READY)
 
     async def on_message(self, message): return
@@ -66,7 +66,7 @@ class TwitchCallBackBot(commands.Bot):
             callback_info = json.load(f)
         for streamer in callback_info.keys():
             await sleep(0.2)
-            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {self.bot.auth['oauth']}", "Client-Id": self.bot.auth["client_id"]})).json()
+            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
             if response["data"] == []:
                 await self.streamer_offline(streamer)
             else:

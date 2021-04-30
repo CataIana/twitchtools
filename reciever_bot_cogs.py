@@ -418,7 +418,7 @@ class RecieverCommands(commands.Cog):
                     status_channel_extras = f"Live Status Channel: {status_channel.name} `{status_channel.id if status_channel is not None else None}`"
                 else:
                     status_channel_extras = None
-                streamers.append(f"{x}: Alert Role: {role.name} `{role.id if role is not None else None}` Alert Mode: {y['alert_roles'][str(ctx.guild.id)]['mode']} {status_channel_extras}")
+                streamers.append(f"{x}: Alert Role: {role.name if role is not None else None} `{y['alert_roles'][str(ctx.guild.id)]['role_id']}` Alert Mode: {y['alert_roles'][str(ctx.guild.id)]['mode']} {status_channel_extras}")
         if len(streamers) == 1:
             await ctx.send(f"There are no streamers defined for this guild!\nGuild Alert Channel: {alert_channel}")
             return
@@ -441,7 +441,7 @@ class RecieverCommands(commands.Cog):
         with open("callbacks.json", "w") as f:
             f.write(json.dumps(callbacks, indent=4))
         embed = Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
-        await ctx.send4(embed=embed)
+        await ctx.send(embed=embed)
 
             
 async def random_string_generator(str_size):
