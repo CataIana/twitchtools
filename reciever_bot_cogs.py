@@ -203,6 +203,8 @@ class RecieverCommands(commands.Cog):
         twitch_username = username_message.content.split("/")[-1].lower()
         with open("callbacks.json") as f:
             callbacks = json.load(f)
+        
+        warning = None
         for x, y in callbacks.items():
             if str(ctx.guild.id) in y["alert_roles"]:
                 warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
@@ -212,7 +214,7 @@ class RecieverCommands(commands.Cog):
         twitch_userid = json_obj["users"][0]["_id"]
 
         embed = Embed(
-            title="Step 2 - Channel",
+            title="Step 2 - Role",
             description=f"Please tag, write the name of, or the ID of the role you would like to be pinged when {twitch_username} goes live. If you do not want an role, type 'no'. If you want to mention everyone, type 'everyone'",
             color=self.bot.colour
         )
@@ -235,7 +237,8 @@ class RecieverCommands(commands.Cog):
         while invalid_message_id:
             try:
                 setup_role_msg = await self.bot.wait_for("message", timeout=180.0, check=check)
-                await warning.delete()
+                if warning is not None:
+                    await warning.delete()
                 if setup_role_msg.content == "no":
                     invalid_message_id = False
                     alert_role = None
@@ -382,7 +385,8 @@ class RecieverCommands(commands.Cog):
 
         response = await (await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={twitch_username}", headers={"Authorization": f"Bearer {self.bot.auth['oauth']}", "Client-Id": self.bot.auth["client_id"]})).json()
         if response["data"] == []:
-            await status_channel.edit(name="stream-offline")
+            if status_channel is not None:
+                await status_channel.edit(name="stream-offline")
             await self.bot.streamer_offline(twitch_username)
         else:
             await self.bot.streamer_online(twitch_username, response["data"][0])

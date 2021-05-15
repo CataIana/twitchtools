@@ -136,10 +136,12 @@ class TwitchCallBackBot(commands.Bot):
             callback_info = json.load(f)
         with open("alert_channels.json") as f:
             alert_channels = json.load(f)
-        if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 1800:
-            self.log.info(f"Ignoring alert for {streamer} due to cooldown")
-            return
+        only_channel = False
+        if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
+            self.log.info(f"Cooldown active, not sending alert for {streamer} but creating channels")
+            only_channel = True
         if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
+            self.log.info(f"Ignoring alert while live for {streamer}")
             return
         self.log.info(f"Updating status to online for {streamer}")
         #Sending webhook if applicable
@@ -181,12 +183,13 @@ class TwitchCallBackBot(commands.Bot):
             else:
                 role = guild.get_role(alert_info["role_id"])
                 role_mention = f" {role.mention}"
-            try:
-                alert_channel = self.get_channel(alert_channels[guild_id])
-                live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
-                live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
-            except KeyError:
-                pass
+            if not only_channel:
+                try:
+                    alert_channel = self.get_channel(alert_channels[guild_id])
+                    live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
+                    live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
+                except KeyError:
+                    pass
             #Add channel to live alert list
             if alert_info["mode"] == 0:
                 NewChannelOverrides = {self.user: SelfOverride}
