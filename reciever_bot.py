@@ -67,6 +67,10 @@ class TwitchCallBackBot(commands.Bot):
         for streamer in callback_info.keys():
             await sleep(0.2)
             response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
+            if response.get("error", None) is not None:
+                self.log.critical("Invalid oauth token!")
+                self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
+                exit()
             if response["data"] == []:
                 await self.streamer_offline(streamer)
             else:
@@ -87,20 +91,16 @@ class TwitchCallBackBot(commands.Bot):
             if channel_cache[streamer].get("live_channels", None) is None or channel_cache[streamer].get("live_alerts", None) is None:
                 return
             self.log.info(f"Updating status to offline for {streamer}")
-            do = False
             for channel_id in channel_cache[streamer].get("live_channels", []):
-                do = True
                 channel = self.get_channel(channel_id)
                 if channel is not None:
                     if callback_info[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
                         await channel.delete()
                     elif callback_info[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         await channel.edit(name="stream-offline")
-            if do:
+            if channel_cache[streamer].get("live_channels", None) is not None:
                 del channel_cache[streamer]["live_channels"]
-            do = False
             for alert_ids in channel_cache[streamer].get("live_alerts", []):
-                do = True
                 channel = self.get_channel(alert_ids["channel"])
                 if channel is not None:
                     try:
@@ -119,7 +119,7 @@ class TwitchCallBackBot(commands.Bot):
                                 await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
                             except IndexError:
                                 self.log.warning(f"Error editing message to offline in {channel.guild.name}")
-            if do:
+            if channel_cache[streamer].get("live_alerts", None) is not None:
                 del channel_cache[streamer]["live_alerts"]
             with open("channelcache.cache", "w") as f:
                 f.write(json.dumps(channel_cache, indent=4))
@@ -138,11 +138,12 @@ class TwitchCallBackBot(commands.Bot):
             alert_channels = json.load(f)
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
-            self.log.info(f"Cooldown active, not sending alert for {streamer} but creating channels")
             only_channel = True
         if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
             self.log.info(f"Ignoring alert while live for {streamer}")
             return
+        if only_channel:
+            self.log.info(f"Cooldown active, not sending alert for {streamer} but creating channels")
         self.log.info(f"Updating status to online for {streamer}")
         #Sending webhook if applicable
         if "webhook" in callback_info[streamer].keys():

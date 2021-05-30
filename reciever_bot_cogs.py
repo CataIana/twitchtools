@@ -1,5 +1,6 @@
 from discord import ChannelType, Embed, TextChannel, AllowedMentions
 from discord.ext import commands
+from asyncio import TimeoutError
 import requests
 import json
 from datetime import datetime
@@ -205,9 +206,8 @@ class RecieverCommands(commands.Cog):
             callbacks = json.load(f)
         
         warning = None
-        for x, y in callbacks.items():
-            if str(ctx.guild.id) in y["alert_roles"]:
-                warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
+        if str(ctx.guild.id) in callbacks.get(twitch_username, {}).get("alert_roles", {}).keys():
+            warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
 
         response = await self.bot.aSession.get(url=f"https://api.twitch.tv/kraken/users?login={twitch_username}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": self.bot.auth["client_id"]})
         json_obj = await response.json()
