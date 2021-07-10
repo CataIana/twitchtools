@@ -1,3 +1,4 @@
+from json.decoder import JSONDecodeError
 from aiohttp import web
 import json
 
@@ -67,6 +68,8 @@ class RecieverWebServer():
         try:
             notif_info = (await request.json())["data"]
         except KeyError:
+            return web.Response(status=404)
+        except JSONDecodeError:
             return web.Response(status=404)
         self.bot.log.debug(f"Payload: {json.dumps(notif_info, indent=4)}")
         self.bot.log.debug(f"Notification ID: {notification_id}")

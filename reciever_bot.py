@@ -38,7 +38,8 @@ class TwitchCallBackBot(commands.Bot):
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
         
-        self.load_extension(f'reciever_bot_cogs')
+        self.load_extension(f"reciever_bot_cogs")
+        self.load_extension(f"emotes_sync")
         self.colour = Colour.from_rgb(128, 0, 128)
         with open("auth.json") as f:
             self.auth = json.load(f)
@@ -139,7 +140,12 @@ class TwitchCallBackBot(commands.Bot):
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
             only_channel = True
-        if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
+        #if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
+        #    self.log.info(f"Ignoring alert while live for {streamer}")
+        #    return
+        temp = dict(channel_cache.get(streamer, {}))
+        del temp["alert_cooldown"]
+        if list(temp.keys()) != []:
             self.log.info(f"Ignoring alert while live for {streamer}")
             return
         if only_channel:
@@ -177,47 +183,52 @@ class TwitchCallBackBot(commands.Bot):
         live_alerts = []
         for guild_id, alert_info in callback_info[streamer]["alert_roles"].items():
             guild = self.get_guild(int(guild_id))
-            if alert_info["role_id"] == "everyone":
-                role_mention = f" {guild.default_role}"
-            elif alert_info["role_id"] == None:
-                role_mention = ""
-            else:
-                role = guild.get_role(alert_info["role_id"])
-                role_mention = f" {role.mention}"
-            if not only_channel:
-                try:
-                    alert_channel = self.get_channel(alert_channels[guild_id])
-                    live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
-                    live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
-                except KeyError:
-                    pass
-            #Add channel to live alert list
-            if alert_info["mode"] == 0:
-                NewChannelOverrides = {self.user: SelfOverride}
-                if alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[guild.default_role] = DefaultRole
-                if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[role] = OverrideRole
+            if guild is not None:
+                if alert_info["role_id"] == "everyone":
+                    role_mention = f" {guild.default_role}"
+                elif alert_info["role_id"] == None:
+                    role_mention = ""
+                else:
+                    role = guild.get_role(alert_info["role_id"])
+                    role_mention = f" {role.mention}"
+                if not only_channel:
+                    try:
+                        alert_channel = self.get_channel(alert_channels[guild_id])
+                        if alert_channel is not None:
+                            try:
+                                live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
+                                live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
+                            except Forbidden:
+                                pass
+                    except KeyError:
+                        pass
+                #Add channel to live alert list
+                if alert_info["mode"] == 0:
+                    NewChannelOverrides = {self.user: SelfOverride}
+                    if alert_info["role_id"] != "everyone":
+                        NewChannelOverrides[guild.default_role] = DefaultRole
+                    if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
+                        NewChannelOverrides[role] = OverrideRole
 
-                channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
-                if channel is not None:
-                    try:
-                        await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
-                        live_channels.append(channel.id)
-                    except Forbidden:
-                        self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
-                else:
-                    self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
-            elif alert_info["mode"] == 2:
-                channel = self.get_channel(alert_info["channel_id"])
-                if channel is not None:
-                    try:
-                        await channel.edit(name="🔴now-live")
-                        live_channels.append(channel.id)
-                    except Forbidden:
-                        self.log.warning(f"Forbidden error updating {streamer} in guild {channel.guild.name}")
-                else:
-                    self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
+                    channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
+                    if channel is not None:
+                        try:
+                            await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
+                            live_channels.append(channel.id)
+                        except Forbidden:
+                            self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
+                    else:
+                        self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
+                elif alert_info["mode"] == 2:
+                    channel = self.get_channel(alert_info["channel_id"])
+                    if channel is not None:
+                        try:
+                            await channel.edit(name="🔴now-live")
+                            live_channels.append(channel.id)
+                        except Forbidden:
+                            self.log.warning(f"Forbidden error updating {streamer} in guild {channel.guild.name}")
+                    else:
+                        self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
         channel_cache[streamer] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
         with open("channelcache.cache", "w") as f:
             f.write(json.dumps(channel_cache, indent=4))
