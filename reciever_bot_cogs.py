@@ -191,9 +191,9 @@ class RecieverCommands(commands.Cog):
             if ctx.author != m.author:
                 return False
             twitch_username = m.content.split("/")[-1].lower()
-            response = requests.get(url=f"https://api.twitch.tv/kraken/users?login={twitch_username}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": self.bot.auth["client_id"]})
+            response = requests.get(url=f"https://api.twitch.tv/helix/users?login={twitch_username}", headers={"Client-ID": self.bot.auth["client_id"], "Authorization": f"Bearer {self.bot.auth['oauth']}"})
             json_obj = response.json()
-            if len(json_obj["users"]) == 1:
+            if len(json_obj["data"]) == 1:
                 return True
         try:
             username_message = await self.bot.wait_for("message", timeout=180.0, check=check)
@@ -209,9 +209,9 @@ class RecieverCommands(commands.Cog):
         if str(ctx.guild.id) in callbacks.get(twitch_username, {}).get("alert_roles", {}).keys():
             warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
 
-        response = await self.bot.aSession.get(url=f"https://api.twitch.tv/kraken/users?login={twitch_username}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": self.bot.auth["client_id"]})
+        response = await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/users?login={twitch_username}", headers={"Client-ID": self.bot.auth["client_id"], "Authorization": f"Bearer {self.bot.auth['oauth']}"})
         json_obj = await response.json()
-        twitch_userid = json_obj["users"][0]["_id"]
+        twitch_userid = json_obj["data"][0]["id"]
 
         embed = Embed(
             title="Step 2 - Role",
@@ -241,7 +241,7 @@ class RecieverCommands(commands.Cog):
                     await warning.delete()
                 if setup_role_msg.content == "no":
                     invalid_message_id = False
-                    alert_role = None
+                    alert_role = "no"
                     await setup_role_msg.delete()
                 if setup_role_msg.content == "everyone":
                     invalid_message_id = False

@@ -65,14 +65,14 @@ class TwitchCallBackBot(commands.Bot):
     async def catchup_streamers(self):
         with open("callbacks.json") as f:
             callback_info = json.load(f)
+        response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(list(callback_info.keys()))}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
+        if response.get("error", None) is not None:
+            self.log.critical("Invalid oauth token!")
+            self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
+            exit()
+        online_streams = [stream["user_login"] for stream in response["data"]]
         for streamer in callback_info.keys():
-            await sleep(0.2)
-            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={streamer}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
-            if response.get("error", None) is not None:
-                self.log.critical("Invalid oauth token!")
-                self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
-                exit()
-            if response["data"] == []:
+            if streamer not in online_streams:
                 await self.streamer_offline(streamer)
             else:
                 await self.streamer_online(streamer, response["data"][0])
@@ -143,7 +143,7 @@ class TwitchCallBackBot(commands.Bot):
         #if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
         #    self.log.info(f"Ignoring alert while live for {streamer}")
         #    return
-        temp = dict(channel_cache.get(streamer, {}))
+        temp = dict(channel_cache.get(streamer, {"alert_cooldown": 0}))
         del temp["alert_cooldown"]
         if list(temp.keys()) != []:
             self.log.info(f"Ignoring alert while live for {streamer}")

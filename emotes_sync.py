@@ -25,14 +25,14 @@ class EmoteSync(commands.Cog):
             auth = json.loads(await f.read())
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
-                json_obj = await (await self.bot.aSession.get(url=f"https://api.twitch.tv/kraken/users?login={data['streamer']}", headers={"Accept": "application/vnd.twitchtv.v5+json", "Client-ID": auth["client_id"]})).json()
+                json_obj = await (await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/users?login={data['streamer']}", headers={"Client-ID": auth["client_id"], "Authorization": f"Bearer {auth['oauth']}"})).json()
                 if "error" in json_obj.keys():
                     self.bot.log.error(f"Error {json_obj['error']}: {json_obj['message']}")
                     continue
-                if json_obj["users"] == []:
+                if json_obj["data"] == []:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue
-                user_id = json_obj["users"][0]["_id"]
+                user_id = json_obj["data"][0]["id"]
                 emote_sync[guild_id]["streamer_id"] = user_id
             else:
                 user_id = data.get("streamer_id")
