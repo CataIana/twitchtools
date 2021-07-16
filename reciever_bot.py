@@ -65,12 +65,15 @@ class TwitchCallBackBot(commands.Bot):
     async def catchup_streamers(self):
         with open("callbacks.json") as f:
             callback_info = json.load(f)
-        response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(list(callback_info.keys()))}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
-        if response.get("error", None) is not None:
-            self.log.critical("Invalid oauth token!")
-            self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
-            exit()
-        online_streams = [stream["user_login"] for stream in response["data"]]
+        chunks = [list(callback_info.keys())[x:x+100] for x in range(0, len(list(callback_info.keys())), 100)]
+        online_streams = []
+        for chunk in chunks:
+            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(chunk)}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
+            if response.get("error", None) is not None:
+                self.log.critical("Invalid oauth token!")
+                self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
+                exit()
+            online_streams += [stream["user_login"] for stream in response["data"]]
         for streamer in callback_info.keys():
             if streamer not in online_streams:
                 await self.streamer_offline(streamer)
