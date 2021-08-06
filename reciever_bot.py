@@ -19,7 +19,7 @@ class TwitchCallBackBot(commands.Bot):
         intents = Intents.none()
         intents.guilds = True
         intents.messages = True
-        super().__init__(command_prefix="t!", case_insensitive=True, intents=intents)
+        super().__init__(command_prefix=commands.when_mentioned_or("t!"), case_insensitive=True, intents=intents)
 
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
@@ -45,6 +45,7 @@ class TwitchCallBackBot(commands.Bot):
             self.auth = json.load(f)
         self.token = self.auth["bot_token"]
         self._uptime = time()
+        self.aSession = None
 
     async def close(self):
         notify(Notification.STOPPING)
@@ -53,9 +54,12 @@ class TwitchCallBackBot(commands.Bot):
         await super().close()
 
     @commands.Cog.listener()
+    async def on_connect(self):
+        self.aSession = ClientSession() #Make the aiohttp session asap
+
+    @commands.Cog.listener()
     async def on_ready(self):
-        self.aSession = ClientSession()
-        await self.catchup_streamers()
+        #await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
         await self.change_presence(activity=Activity(type=ActivityType.listening, name="stream status"))
         notify(Notification.READY)
@@ -63,6 +67,7 @@ class TwitchCallBackBot(commands.Bot):
     async def on_message(self, message): return
 
     async def catchup_streamers(self):
+        await self.wait_until_ready()
         with open("callbacks.json") as f:
             callback_info = json.load(f)
         chunks = [list(callback_info.keys())[x:x+100] for x in range(0, len(list(callback_info.keys())), 100)]

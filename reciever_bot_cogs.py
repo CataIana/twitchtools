@@ -1,5 +1,5 @@
 from discord import ChannelType, Embed, TextChannel, AllowedMentions
-from discord.ext import commands
+from discord.ext import commands, tasks
 from asyncio import TimeoutError
 import requests
 import json
@@ -9,10 +9,38 @@ from types import BuiltinFunctionType, FunctionType, MethodType
 from random import choice
 from string import ascii_letters
 
+def is_mod():
+    async def predicate(ctx):
+        if ctx.author.id in [[ctx.cog.bot.owner_id] + list(ctx.cog.bot.owner_ids)]:
+            return True
+        return ctx.author.guild_permissions.manage_guild
+    return commands.check(predicate)
+
+
+def is_admin():
+    async def predicate(ctx):
+        if ctx.author.id in [[ctx.cog.bot.owner_id] + list(ctx.cog.bot.owner_ids)]:
+            return True
+        return ctx.author.guild_permissions.administrator
+    return commands.check(predicate)
+
 class RecieverCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         super().__init__()
+        self.bot.help_command = commands.MinimalHelpCommand()
+        self.bot.help_command.cog = self
+        self.backup_checks.start()
+
+    def cog_unload(self):
+        self.bot.help_command = self.bot.super().help_command
+        self.backup_checks.cancel()
+
+    @tasks.loop(minutes=10)
+    async def backup_checks(self):
+        self.bot.log.info("Running streamer catchup...")
+        await self.bot.catchup_streamers()
+        self.bot.log.info("Finished streamer catchup")
 
     @commands.Cog.listener()
     async def on_command(self, ctx):
@@ -157,7 +185,7 @@ class RecieverCommands(commands.Cog):
                 await ctx.send(content=code_string.format(d_str))
 
     @commands.command()
-    @commands.is_owner()
+    @is_admin()
     async def alertchannel(self, ctx, channel: TextChannel = None):
         with open("alert_channels.json") as f:
             alert_channels = json.load(f)
@@ -178,7 +206,7 @@ class RecieverCommands(commands.Cog):
             await ctx.send(f"Alert channel for this guild was set to {channel.mention}")
 
     @commands.command()
-    @commands.is_owner()
+    @is_admin()
     async def addstreamer(self, ctx):
         embed = Embed(
             title="Step 1 - Streamer",
@@ -403,7 +431,7 @@ class RecieverCommands(commands.Cog):
         await setup_message.edit(embed=embed)
 
     @commands.command()
-    @commands.is_owner()
+    @is_admin()
     async def liststreamers(self, ctx):
         with open("callbacks.json") as f:
             callback_info = json.load(f)
@@ -430,7 +458,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(f"```nim\n{lol}```")
 
     @commands.command(aliases=["delstreamer"])
-    @commands.is_owner()
+    @is_admin()
     async def removestreamer(self, ctx, streamer: str):
         with open("callbacks.json") as f:
             callbacks = json.load(f)
