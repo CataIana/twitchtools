@@ -40,6 +40,7 @@ class TwitchCallBackBot(commands.Bot):
         
         self.load_extension(f"reciever_bot_cogs")
         self.load_extension(f"emotes_sync")
+        self.load_extension(f"error_listener")
         self.colour = Colour.from_rgb(128, 0, 128)
         with open("auth.json") as f:
             self.auth = json.load(f)
@@ -200,16 +201,16 @@ class TwitchCallBackBot(commands.Bot):
                     role = guild.get_role(alert_info["role_id"])
                     role_mention = f" {role.mention}"
                 if not only_channel:
-                    try:
-                        alert_channel = self.get_channel(alert_channels[guild_id])
-                        if alert_channel is not None:
-                            try:
-                                live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
-                                live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
-                            except Forbidden:
-                                pass
-                    except KeyError:
-                        pass
+                    alert_channel_id = alert_info.get("channel_override", None)
+                    if alert_channel == None:
+                        alert_channel_id = alert_channels.get(guild_id, None)
+                    alert_channel = self.get_channel(alert_channel_id)
+                    if alert_channel is not None:
+                        try:
+                            live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
+                            live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
+                        except Forbidden:
+                            pass
                 #Add channel to live alert list
                 if alert_info["mode"] == 0:
                     NewChannelOverrides = {self.user: SelfOverride}

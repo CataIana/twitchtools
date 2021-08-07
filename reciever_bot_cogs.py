@@ -1,8 +1,8 @@
-from discord import ChannelType, Embed, TextChannel, AllowedMentions
+from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound
 from discord.ext import commands, tasks
-from asyncio import TimeoutError
-import requests
 import json
+import asyncio
+import requests
 from datetime import datetime
 from time import strftime, localtime, time
 from types import BuiltinFunctionType, FunctionType, MethodType
@@ -36,7 +36,7 @@ class RecieverCommands(commands.Cog):
         self.bot.help_command = self.bot.super().help_command
         self.backup_checks.cancel()
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(seconds=600)
     async def backup_checks(self):
         self.bot.log.info("Running streamer catchup...")
         await self.bot.catchup_streamers()
@@ -46,18 +46,11 @@ class RecieverCommands(commands.Cog):
     async def on_command(self, ctx):
         self.bot.log.info(f"Handling command {ctx.command.name} for {ctx.author} in {ctx.guild.name}")
 
-    @commands.Cog.listener()
-    async def on_slash_command(self, ctx):
-        self.bot.log.info(f"Handling slash command {ctx.command} for {ctx.author} in {ctx.guild.name}")
-
     class CustomContext(commands.Context):
         async def send(self, content=None, **kwargs):
             no_reply_mention = AllowedMentions(replied_user=(
                 True if self.author in self.message.mentions else False))
             kwargs.pop("hidden", None)
-            # if self.bot.server_dict[str(self.guild.id)]["delete_commands"]:
-            #     return await super().send(content, **kwargs, allowed_mentions=no_reply_mention)
-            # else:
             return await self.reply(content, **kwargs, allowed_mentions=no_reply_mention)
 
         async def send_noreply(self, content=None, **kwargs):
@@ -87,7 +80,7 @@ class RecieverCommands(commands.Cog):
     @commands.command()
     @commands.cooldown(1, 2, commands.BucketType.member)
     async def ping(self, ctx):
-        await ctx.send(content="Pong!")
+        await ctx.send(content="Pong!") #Send the pong and let the message listener show the details
 
     @commands.command()
     @commands.is_owner()
@@ -121,68 +114,85 @@ class RecieverCommands(commands.Cog):
     async def aeval(self, ctx, code):
         code_split = ""
         code_length = len(code.split("\\n"))
-        for count, line in enumerate(code.split("\\n")):
-            if count+1 == code_length:
+        for count, line in enumerate(code.split("\\n"), 1):
+            if count == code_length:
                 code_split += f"    return {line}"
             else:
                 code_split += f"    {line}\n"
         combined = f"async def __ex(self, ctx):\n{code_split}"
-        self.bot.log.debug("Processed")
         exec(combined)
         return await locals()['__ex'](self, ctx)
 
-    @commands.command()
+    @commands.command(description="Evaluate a string as a command", aliases=["evalr"])
     @commands.is_owner()
     async def eval(self, ctx, *, com):
         code_string = "```nim\n{}```"
-        # if com.startswith("await "):
-        #     com = com.lstrip("await ")
+        if com.startswith("`") and com.endswith("`"):
+            com = com[1:][:-1]
         try:
-            #resp = eval(com, {"__builtins__": {}, "self": self, "ctx": ctx}, {})  #For sending without globals and locals
-            # resp = eval(com)
-            # if inspect.isawaitable(resp):
-            #     resp = await resp
             resp = await self.aeval(ctx, com)
         except Exception as ex:
             await ctx.send(content=f"Exception Occurred: `{ex}`")
         else:
-            if type(resp) == dict:
-                d = resp
-            elif type(resp) == list:
-                d = resp
-            else:
-                d = {}
-                for att in dir(resp):
+            if not ctx.invoked_with == "evalr":
+                if type(resp) == str:
+                    return await ctx.send(code_string.format(resp))
+
+                attributes = {} #Dict of all attributes
+                methods = [] #Sync methods
+                amethods = [] #Async methods
+                #get a list of all attributes and their values, along with all the functions in seperate lists
+                for attr_name in dir(resp):
                     try:
-                        attr = getattr(resp, att)
+                        attr = getattr(resp, attr_name)
                     except AttributeError:
                         pass
-                    if not att.startswith("__") and type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
-                        d[str(att)] = f"{attr} [{type(attr).__name__}]"
-                if d == {}:
-                    d["str"] = str(resp)
-            if type(d) == list:
-                d_str = "List:\n"
-                for x in d:
-                    if len(d_str + f"{x}\n") < 1990:
-                        d_str += f"{x}\n"
+                    if attr_name.startswith("_"):
+                        continue #Most methods/attributes starting with __ or _ are generally unwanted, skip them
+                    if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
+                        attributes[str(attr_name)] = f"{attr} [{type(attr).__name__}]"
                     else:
-                        await ctx.send(content=code_string.format(d_str))
-                        d_str = ""
-                        if len(d_str + f"{x}\n") < 1990:
-                            d_str += f"{x}\n"
-            else:
+                        if asyncio.iscoroutinefunction(attr):
+                            amethods.append(attr_name)
+                        else:
+                            methods.append(attr_name)
+                if attributes == {}:
+                    attributes["str"] = str(resp)
+
+                #Form the long ass string of everything
+                return_string = []
+                if type(resp) != list:
+                    stred = str(resp)
+                else:
+                    stred = '\n'.join([str(r) for r in resp])
+                return_string += [f"Type: {type(resp).__name__}", f"Str: {stred}", '', "Attributes:"] #List return type, it's str value
+                return_string += [f"{x}:    {y}" for x, y in attributes.items()]
+
+                if methods != []:
+                    return_string.append("\nMethods:")
+                    return_string.append(', '.join([method for method in methods]).rstrip(", "))
+
+                if amethods != []:
+                    return_string.append("\n\nAsync/Awaitable Methods:")
+                    return_string.append(', '.join([method for method in amethods]).rstrip(", "))
+
                 d_str = ""
-                for x, y in d.items():
-                    if len(d_str + f"{x}:    {y}\n") < 1990:
-                        d_str += f"{x}:    {y}\n"
+                for x in return_string:
+                    if len(d_str + f"{x.rstrip(', ')}\n") < 1990:
+                        d_str += f"{x.rstrip(', ')}\n"
                     else:
-                        await ctx.send(content=code_string.format(d_str))
-                        d_str = ""
-                        if len(d_str + f"{x}:    {y}\n") < 1990:
-                            d_str += f"{x}:    {y}\n"
-            if d_str != "":
-                await ctx.send(content=code_string.format(d_str))
+                        if len(code_string.format(d_str)) > 2000:
+                            while d_str != "":
+                                await ctx.send(code_string.format(d_str[:1990]))
+                                d_str = d_str[1990:]
+                        else:
+                            await ctx.send(code_string.format(d_str))
+                        d_str = f"{x.rstrip(', ')}\n"
+                if d_str != "":
+                    try:
+                        await ctx.send(code_string.format(d_str))
+                    except NotFound:
+                        pass
 
     @commands.command()
     @is_admin()
@@ -192,7 +202,7 @@ class RecieverCommands(commands.Cog):
         if channel is None:
             alert_channel_id = alert_channels.get(str(ctx.guild.id), None)
             if alert_channel_id is None:
-                await ctx.send("Alert channel for this guild is not defined!")
+                await ctx.send("Alert channel for this guild is not set!")
                 return
             alert_channel = self.bot.get_channel(alert_channel_id)
             if alert_channel is None:
@@ -430,32 +440,47 @@ class RecieverCommands(commands.Cog):
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
         await setup_message.edit(embed=embed)
 
-    @commands.command()
+    @commands.command(aliases=["streamers"])
     @is_admin()
     async def liststreamers(self, ctx):
         with open("callbacks.json") as f:
             callback_info = json.load(f)
         with open("alert_channels.json") as f:
             alert_channels = json.load(f)
+
         alert_channel = self.bot.get_channel(alert_channels.get(str(ctx.guild.id), None))
         if alert_channel is not None:
             alert_channel = alert_channel.mention
-        streamers = []
-        streamers.append(f"Guild Alert Channel: {alert_channel}\n\n")
+        uwu = f"Guild Alert Channel: {alert_channel}```nim\n{'Channel':15s} {'Alert Role':25s} {'Channel Override':18s} Alert Mode \n"
         for x, y in callback_info.items():
             if str(ctx.guild.id) in y["alert_roles"].keys():
-                role = ctx.guild.get_role(y['alert_roles'][str(ctx.guild.id)]['role_id'])
-                status_channel = ctx.guild.get_channel(y['alert_roles'][str(ctx.guild.id)].get('channel_id', None))
-                if status_channel is not None:
-                    status_channel_extras = f"Live Status Channel: {status_channel.name} `{status_channel.id if status_channel is not None else None}`"
+                info = y["alert_roles"][str(ctx.guild.id)]
+                alert_role = info.get("role_id", None)
+                try:
+                    int(alert_role)
+                except ValueError:
+                    pass
                 else:
-                    status_channel_extras = None
-                streamers.append(f"{x}: Alert Role: {role.name if role is not None else None} `{y['alert_roles'][str(ctx.guild.id)]['role_id']}` Alert Mode: {y['alert_roles'][str(ctx.guild.id)]['mode']} {status_channel_extras}")
-        if len(streamers) == 1:
-            await ctx.send(f"There are no streamers defined for this guild!\nGuild Alert Channel: {alert_channel}")
-            return
-        lol = '\n'.join(streamers)
-        await ctx.send(f"```nim\n{lol}```")
+                    alert_role = ctx.guild.get_role(alert_role)
+                    if alert_role is not None:
+                        alert_role = alert_role.name
+                    else:
+                        alert_role = ""
+
+                channel_override = info.get("channel_override", None)
+                channel_override = ctx.guild.get_role(channel_override)
+                if channel_override is not None:
+                    channel_override = channel_override.name
+                else:
+                    channel_override = ""
+
+                if len(uwu + f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n") > 1800:
+                    uwu += "```"
+                    await ctx.send(uwu)
+                    uwu = "```nim\n"
+                uwu += f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n"
+        uwu += "```"
+        await ctx.send(uwu)
 
     @commands.command(aliases=["delstreamer"])
     @is_admin()
@@ -477,27 +502,27 @@ class RecieverCommands(commands.Cog):
 
             
 async def random_string_generator(str_size):
-    return "".join(choice(ascii_letters) for x in range(str_size))
+    return "".join(choice(ascii_letters) for _ in range(str_size))
 
 
-from discord.ext import tasks, commands
+# from discord.ext import tasks, commands
 
-class SubscribeLoop(commands.Cog): #This will trigger straight away after a restart. Undesirable
-    def __init__(self, bot):
-        self.bot = bot
-        self.subscriber.start()
+# class SubscribeLoop(commands.Cog): #This will trigger straight away after a restart. Undesirable
+#     def __init__(self, bot):
+#         self.bot = bot
+#         self.subscriber.start()
 
-    def cog_unload(self):
-        self.subscriber.cancel()
+#     def cog_unload(self):
+#         self.subscriber.cancel()
 
-    @tasks.loop(hours=168)
-    async def subscriber(self):
-        print(self.index)
-        self.index += 1
+#     @tasks.loop(hours=168)
+#     async def subscriber(self):
+#         print(self.index)
+#         self.index += 1
 
-    @subscriber.before_loop
-    async def before_subscriber(self):
-        await self.bot.wait_until_ready()
+#     @subscriber.before_loop
+#     async def before_subscriber(self):
+#         await self.bot.wait_until_ready()
 
 def setup(bot):
     bot.add_cog(RecieverCommands(bot))
