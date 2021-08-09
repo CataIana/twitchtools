@@ -169,10 +169,16 @@ class TwitchCallBackBot(commands.Bot):
             if type(callback_info[streamer]["webhook"]) == list:
                 for webhook in callback_info[streamer]["webhook"]:
                     webhook_obj = Webhook.from_url(webhook, adapter=AsyncWebhookAdapter(self.aSession))
-                    await webhook_obj.send(content=format_)
+                    try:
+                        await webhook_obj.send(content=format_)
+                    except NotFound:
+                        pass
             else:
                 webhook = Webhook.from_url(callback_info[streamer]["webhook"], adapter=AsyncWebhookAdapter(self.aSession))
-                await webhook.send(content=format_)
+                try:
+                    await webhook.send(content=format_)
+                except NotFound:
+                    pass
         #Send live alert message
         embed = Embed(
             title=stream_info["title"], url=f"https://twitch.tv/{stream_info['user_login']}",
@@ -202,7 +208,7 @@ class TwitchCallBackBot(commands.Bot):
                     role_mention = f" {role.mention}"
                 if not only_channel:
                     alert_channel_id = alert_info.get("channel_override", None)
-                    if alert_channel == None:
+                    if alert_channel_id == None:
                         alert_channel_id = alert_channels.get(guild_id, None)
                     alert_channel = self.get_channel(alert_channel_id)
                     if alert_channel is not None:

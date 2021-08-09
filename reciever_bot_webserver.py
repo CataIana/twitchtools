@@ -101,6 +101,8 @@ class RecieverWebServer():
             else:
                 duplicate = False
 
+        channel = notif_info.get("user_login", channel)
+
         if not duplicate:
             if live:
                 if notif_info["game_name"] == "":

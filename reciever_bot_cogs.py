@@ -468,7 +468,7 @@ class RecieverCommands(commands.Cog):
                         alert_role = ""
 
                 channel_override = info.get("channel_override", None)
-                channel_override = ctx.guild.get_role(channel_override)
+                channel_override = ctx.guild.get_channel(channel_override)
                 if channel_override is not None:
                     channel_override = channel_override.name
                 else:
