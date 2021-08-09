@@ -1,4 +1,7 @@
-*.json
+auth.json
+callbacks.json
+emote_sync.json
+alert_channels.json
 *.cache
 __pycache__
 *.log
