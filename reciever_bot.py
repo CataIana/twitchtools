@@ -84,7 +84,7 @@ class TwitchCallBackBot(commands.Bot):
             if streamer not in online_streams:
                 await self.streamer_offline(streamer)
             else:
-                await self.streamer_online(streamer, response["data"][0])
+                await self.streamer_online(streamer, [x for x in response["data"] if x["user_login"] == streamer][0])
 
 
     async def streamer_offline(self, streamer):
