@@ -1,15 +1,15 @@
-from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, AsyncWebhookAdapter, Forbidden, Activity, ActivityType
+from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType
 from aiohttp import ClientSession
-from discord.ext import commands, tasks
+from discord.ext import commands
 from systemd.daemon import notify, Notification
 from aiohttp import ClientSession
-from asyncio import sleep
 import json
 from datetime import datetime
 #from time import time
 from systemd.journal import JournaldLogHandler
 import logging
 from time import time
+import aiofiles
 from reciever_bot_webserver import RecieverWebServer
 
 
@@ -67,18 +67,47 @@ class TwitchCallBackBot(commands.Bot):
 
     async def on_message(self, message): return
 
+    async def api_request(self, url, session=None, method="get", **kwargs):
+        session = session or self.aSession
+        if method == "get":
+            response = await session.get(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+        elif method == "post":
+            response = await session.post(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+        elif method == "delete":
+            response = await session.delete(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+        else:
+            return None
+        if response.status == 401: #Reauth pog
+            reauth = await session.post(url=f"https://id.twitch.tv/oauth2/token?client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=client_credentials")
+            if reauth.status == 401:
+                self.bot.log.critical("Well somethin fucked up. Check your credentials!")
+                await self.close()
+            reauth_data = await reauth.json()
+            self.auth["oauth"] = reauth_data["access_token"]
+            async with aiofiles.open("auth.json", "w") as f:
+                await f.write(json.dumps(self.auth, indent=4))
+            if method == "get":
+                response = await session.get(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+            elif method == "post":
+                response = await session.post(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+            elif method == "delete":
+                response = await session.delete(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+            else:
+                return None
+        else:
+            return response
+
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        with open("callbacks.json") as f:
-            callback_info = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callback_info = json.loads(await f.read())
         chunks = [list(callback_info.keys())[x:x+100] for x in range(0, len(list(callback_info.keys())), 100)]
         online_streams = []
         for chunk in chunks:
-            response = await (await self.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(chunk)}", headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]})).json()
+            response = await self.api_request(f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(chunk)}")
+            response = await response.json()
             if response.get("error", None) is not None:
                 self.log.critical("Invalid oauth token!")
-                self.log.critical(f"Reauthorize with link: https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri=https://twitchapps.com/tmi/&response_type=token")
-                exit()
             online_streams += [stream["user_login"] for stream in response["data"]]
         for streamer in callback_info.keys():
             if streamer not in online_streams:
@@ -89,14 +118,14 @@ class TwitchCallBackBot(commands.Bot):
 
     async def streamer_offline(self, streamer):
         try:
-            with open("channelcache.cache") as f:
-                channel_cache = json.load(f)
+            async with aiofiles.open("channelcache.cache") as f:
+                channel_cache = json.loads(await f.read())
         except FileNotFoundError:
             channel_cache = {}
         except json.decoder.JSONDecodeError:
             channel_cache = {}
-        with open("callbacks.json") as f:
-            callback_info = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callback_info = json.loads(await f.read())
         if streamer in channel_cache.keys():
             if channel_cache[streamer].get("live_channels", None) is None or channel_cache[streamer].get("live_alerts", None) is None:
                 return
@@ -131,21 +160,21 @@ class TwitchCallBackBot(commands.Bot):
                                 self.log.warning(f"Error editing message to offline in {channel.guild.name}")
             if channel_cache[streamer].get("live_alerts", None) is not None:
                 del channel_cache[streamer]["live_alerts"]
-            with open("channelcache.cache", "w") as f:
-                f.write(json.dumps(channel_cache, indent=4))
+            async with aiofiles.open("channelcache.cache", "w") as f:
+                await f.write(json.dumps(channel_cache, indent=4))
 
     async def streamer_online(self, streamer, stream_info):
         try:
-            with open("channelcache.cache") as f:
-                channel_cache = json.load(f)
+            async with aiofiles.open("channelcache.cache") as f:
+                channel_cache = json.loads(await f.read())
         except FileNotFoundError:
             channel_cache = {}
         except json.decoder.JSONDecodeError:
             channel_cache = {}
-        with open("callbacks.json") as f:
-            callback_info = json.load(f)
-        with open("alert_channels.json") as f:
-            alert_channels = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callback_info = json.loads(await f.read())
+        async with aiofiles.open("alert_channels.json") as f:
+            alert_channels = json.loads(await f.read())
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
             only_channel = True
@@ -168,13 +197,13 @@ class TwitchCallBackBot(commands.Bot):
                 format_ = "{user_name} is live! Playing {game_name}!\nhttps://twitch.tv/{user_name}".format(**stream_info)
             if type(callback_info[streamer]["webhook"]) == list:
                 for webhook in callback_info[streamer]["webhook"]:
-                    webhook_obj = Webhook.from_url(webhook, adapter=AsyncWebhookAdapter(self.aSession))
+                    webhook_obj = Webhook.from_url(webhook, self.aSession)
                     try:
                         await webhook_obj.send(content=format_)
                     except NotFound:
                         pass
             else:
-                webhook = Webhook.from_url(callback_info[streamer]["webhook"], adapter=AsyncWebhookAdapter(self.aSession))
+                webhook = Webhook.from_url(callback_info[streamer]["webhook"], self.aSession)
                 try:
                     await webhook.send(content=format_)
                 except NotFound:
@@ -225,15 +254,16 @@ class TwitchCallBackBot(commands.Bot):
                     if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
                         NewChannelOverrides[role] = OverrideRole
 
-                    channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
-                    if channel is not None:
-                        try:
-                            await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
-                            live_channels.append(channel.id)
-                        except Forbidden:
-                            self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
-                    else:
-                        self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
+                    if f"🔴{streamer}" not in [channel.name for channel in guild.text_channels]:
+                        channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
+                        if channel is not None:
+                            try:
+                                await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
+                                live_channels.append(channel.id)
+                            except Forbidden:
+                                self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")
+                        else:
+                            self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
                 elif alert_info["mode"] == 2:
                     channel = self.get_channel(alert_info["channel_id"])
                     if channel is not None:
@@ -245,8 +275,8 @@ class TwitchCallBackBot(commands.Bot):
                     else:
                         self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
         channel_cache[streamer] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
-        with open("channelcache.cache", "w") as f:
-            f.write(json.dumps(channel_cache, indent=4))
+        async with aiofiles.open("channelcache.cache", "w") as f:
+            await f.write(json.dumps(channel_cache, indent=4))
 
 
 bot = TwitchCallBackBot()

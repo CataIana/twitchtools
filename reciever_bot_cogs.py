@@ -1,4 +1,4 @@
-from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound
+from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound, Forbidden
 from discord.ext import commands, tasks
 import json
 import asyncio
@@ -8,6 +8,7 @@ from time import strftime, localtime, time
 from types import BuiltinFunctionType, FunctionType, MethodType
 from random import choice
 from string import ascii_letters
+import aiofiles
 
 def is_mod():
     async def predicate(ctx):
@@ -19,7 +20,7 @@ def is_mod():
 
 def is_admin():
     async def predicate(ctx):
-        if ctx.author.id in [[ctx.cog.bot.owner_id] + list(ctx.cog.bot.owner_ids)]:
+        if await ctx.bot.is_owner(ctx.author):
             return True
         return ctx.author.guild_permissions.administrator
     return commands.check(predicate)
@@ -92,6 +93,14 @@ class RecieverCommands(commands.Cog):
             cog_count += 1
             self.bot.reload_extension(ext_name)
         await ctx.send(content=f"<:green_tick:809191812434231316> Succesfully reloaded! Reloaded {cog_count} cogs!")
+
+    @commands.command()
+    @commands.is_owner()
+    async def catchup(self, ctx):
+        self.bot.log.info("Running streamer catchup...")
+        await self.bot.catchup_streamers()
+        self.bot.log.info("Finished streamer catchup")
+        await ctx.send("Finished catchup!")
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.member)
@@ -197,8 +206,8 @@ class RecieverCommands(commands.Cog):
     @commands.command()
     @is_admin()
     async def alertchannel(self, ctx, channel: TextChannel = None):
-        with open("alert_channels.json") as f:
-            alert_channels = json.load(f)
+        async with aiofiles.open("alert_channels.json") as f:
+            alert_channels = json.loads(await f.read())
         if channel is None:
             alert_channel_id = alert_channels.get(str(ctx.guild.id), None)
             if alert_channel_id is None:
@@ -211,8 +220,8 @@ class RecieverCommands(commands.Cog):
             await ctx.send(f"Alert channel for this guild is {alert_channel.mention}")
         else:
             alert_channels[str(ctx.guild.id)] = channel.id
-            with open("alert_channels.json", "w") as f:
-                f.write(json.dumps(alert_channels, indent=4))
+            async with aiofiles.open("alert_channels.json", "w") as f:
+                await f.write(json.dumps(alert_channels, indent=4))
             await ctx.send(f"Alert channel for this guild was set to {channel.mention}")
 
     @commands.command()
@@ -235,19 +244,22 @@ class RecieverCommands(commands.Cog):
                 return True
         try:
             username_message = await self.bot.wait_for("message", timeout=180.0, check=check)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             await setup_message.delete()
             return
-        await username_message.delete()
+        try:
+            await username_message.delete()
+        except Forbidden:
+            pass
         twitch_username = username_message.content.split("/")[-1].lower()
-        with open("callbacks.json") as f:
-            callbacks = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callbacks = json.loads(await f.read())
         
         warning = None
         if str(ctx.guild.id) in callbacks.get(twitch_username, {}).get("alert_roles", {}).keys():
             warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
 
-        response = await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/users?login={twitch_username}", headers={"Client-ID": self.bot.auth["client_id"], "Authorization": f"Bearer {self.bot.auth['oauth']}"})
+        response = await self.bot.api_request(f"https://api.twitch.tv/helix/users?login={twitch_username}")
         json_obj = await response.json()
         twitch_userid = json_obj["data"][0]["id"]
 
@@ -280,22 +292,35 @@ class RecieverCommands(commands.Cog):
                 if setup_role_msg.content == "no":
                     invalid_message_id = False
                     alert_role = "no"
-                    await setup_role_msg.delete()
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
                 if setup_role_msg.content == "everyone":
                     invalid_message_id = False
                     alert_role = "everyone"
-                    await setup_role_msg.delete()
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
                 if len(setup_role_msg.role_mentions) == 1:
                     alert_role = setup_role_msg.role_mentions[0]
                     if alert_role.position < ctx.guild.me.top_role.position:
                         invalid_message_id = False
-                    await setup_role_msg.delete()
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
                 role = [role for role in ctx.guild.roles[1:] if role.name.lower() == setup_role_msg.content.lower()]
                 if role != []:
                     alert_role = role[0]
-                    if alert_role.position < ctx.guild.me.top_role.position:
-                        invalid_message_id = False
-                    await setup_role_msg.delete()
+                    invalid_message_id = False
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
+                    except NotFound:
+                        pass
                 try:
                     int(setup_role_msg.content)
                 except ValueError:
@@ -304,10 +329,12 @@ class RecieverCommands(commands.Cog):
                     role = ctx.guild.get_role(int(setup_role_msg.content))
                     if role != None:
                         alert_role = role
-                        if alert_role.position < ctx.guild.me.top_role.position:
-                            invalid_message_id = False
+                        invalid_message_id = False
+                        try:
                             await setup_role_msg.delete()
-            except TimeoutError:
+                        except Forbidden:
+                            pass
+            except asyncio.TimeoutError:
                 await setup_message.delete()
                 return
         
@@ -329,8 +356,13 @@ class RecieverCommands(commands.Cog):
                 if setup_mode_msg.content in ["0", "2"]:
                     invalid_message_id = False
                     mode = int(setup_mode_msg.content)
-                    await setup_mode_msg.delete()
-            except TimeoutError:
+                    try:
+                        await setup_mode_msg.delete()
+                    except Forbidden:
+                        pass
+                    except NotFound:
+                        pass
+            except asyncio.TimeoutError:
                 await setup_message.delete()
                 return
 
@@ -345,10 +377,13 @@ class RecieverCommands(commands.Cog):
                 return ctx.author == m.author and len(m.channel_mentions) == 1
             try:
                 channel_mention_message = await self.bot.wait_for("message", timeout=180.0, check=check)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 await setup_message.delete()
                 return
-            await channel_mention_message.delete()
+            try:
+                await channel_mention_message.delete()
+            except Forbidden:
+                pass
             status_channel = channel_mention_message.channel_mentions[0]
             status_channel_perms = status_channel.permissions_for(ctx.guild.me)
             if status_channel_perms.view_channel == False:
@@ -379,8 +414,8 @@ class RecieverCommands(commands.Cog):
             status_channel = None
 
         
-        with open("alert_channels.json") as f:
-            alert_channels = json.load(f)
+        async with aiofiles.open("alert_channels.json") as f:
+            alert_channels = json.loads(await f.read())
 
         if mode == 0:
             alert_channel_id = alert_channels.get(str(ctx.guild.id), None)
@@ -393,17 +428,40 @@ class RecieverCommands(commands.Cog):
 
         if twitch_username not in callbacks.keys():
             callbacks[twitch_username] = {"channel_id": twitch_userid, "secret": await random_string_generator(21), "alert_roles": {}}
-            response = requests.post("https://api.twitch.tv/helix/webhooks/hub",
-                data={
-                    "hub.callback": f"https://twitch-callback.catalana.dev/callback/{twitch_username}",
-                    "hub.mode": "subscribe",
-                    "hub.topic": f"https://api.twitch.tv/helix/streams?user_id={twitch_userid}",
-                    "hub.lease_seconds": "691200",
-                    "hub.secret": callbacks[twitch_username]["secret"]
-                }, headers={"Authorization": f"Bearer {self.bot.auth['oauth']}", "Client-Id": self.bot.auth["client_id"]})
-            if response.status_code != 202:
-                await ctx.send("There was an error subscribing to the pubsub. Please try again later.")
-                return
+            response = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.online",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": twitch_userid
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{twitch_username}",
+                        "secret": callbacks[twitch_username]["secret"]
+                    }
+                }, method="post")
+            response2 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.offline",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": twitch_userid
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{twitch_username}",
+                        "secret": callbacks[twitch_username]["secret"]
+                    }
+                }, method="post")
+            if response.status not in [202, 409]:
+                return await ctx.send(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
+            if response2.status not in [202, 409]:
+                return await ctx.send(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
+            json1 = await response.json()
+            json2 = await response2.json()
+            callbacks[twitch_username]["online_id"] = json1["data"][0]["id"]
+            callbacks[twitch_username]["offline_id"] = json2["data"][0]["id"]
         callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)] = {"mode": mode}
         if alert_role == "everyone":
             callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
@@ -418,10 +476,11 @@ class RecieverCommands(commands.Cog):
             callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
 
 
-        with open("callbacks.json", "w") as f:
-            f.write(json.dumps(callbacks, indent=4))
+        async with aiofiles.open("callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
 
-        response = await (await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/streams?user_login={twitch_username}", headers={"Authorization": f"Bearer {self.bot.auth['oauth']}", "Client-Id": self.bot.auth["client_id"]})).json()
+        response = await self.bot.api_request(f"https://api.twitch.tv/helix/streams?user_login={twitch_username}")
+        response = await response.json()
         if response["data"] == []:
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
@@ -443,10 +502,10 @@ class RecieverCommands(commands.Cog):
     @commands.command(aliases=["streamers"])
     @is_admin()
     async def liststreamers(self, ctx):
-        with open("callbacks.json") as f:
-            callback_info = json.load(f)
-        with open("alert_channels.json") as f:
-            alert_channels = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callback_info = json.loads(await f.read())
+        async with aiofiles.open("alert_channels.json") as f:
+            alert_channels = json.loads(await f.read())
 
         alert_channel = self.bot.get_channel(alert_channels.get(str(ctx.guild.id), None))
         if alert_channel is not None:
@@ -485,8 +544,8 @@ class RecieverCommands(commands.Cog):
     @commands.command(aliases=["delstreamer"])
     @is_admin()
     async def removestreamer(self, ctx, streamer: str):
-        with open("callbacks.json") as f:
-            callbacks = json.load(f)
+        async with aiofiles.open("callbacks.json") as f:
+            callbacks = json.loads(await f.read())
         try:
             del callbacks[streamer]["alert_roles"][str(ctx.guild.id)]
         except KeyError:
@@ -494,9 +553,15 @@ class RecieverCommands(commands.Cog):
             await ctx.send(embed=embed)
             return
         if callbacks[streamer]["alert_roles"] == {}:
+            self.bot.log.info(f"Streamer {streamer} has no more alerts, purging")
+            try:
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['offline_id']}", method="delete")
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['online_id']}", method="delete")
+            except KeyError:
+                pass
             del callbacks[streamer]
-        with open("callbacks.json", "w") as f:
-            f.write(json.dumps(callbacks, indent=4))
+        async with aiofiles.open("callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
         embed = Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
         await ctx.send(embed=embed)
 

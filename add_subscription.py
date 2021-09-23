@@ -90,13 +90,34 @@ while run:
         f.write(j_print(callbacks, indent=4))
     print("Running subscription post")
     channel = callbacks[user["name"].lower()]
-    response = post("https://api.twitch.tv/helix/webhooks/hub",
-                data={
-                    "hub.callback": f"https://twitch-callback.catalana.dev/callback/{user['login'].lower()}",
-                    "hub.mode": "subscribe",
-                    "hub.topic": f"https://api.twitch.tv/helix/streams?user_id={channel['channel_id']}",
-                    "hub.lease_seconds": "691200",
-                    "hub.secret": channel["secret"]
-                }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-Id": auth["client_id"]})
-    print(f"Response for {callbacks[user['login']]}: {response}")
+    response = post("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.online",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": channel["channel_id"]
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{user['login'].lower()}",
+                        "secret": channel["secret"]
+                    }
+                }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-ID": auth["client_id"], "Content-Type": "application/json"})
+    response2 = post("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.offline",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": channel["channel_id"]
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{user['login'].lower()}",
+                        "secret": channel["secret"]
+                    }
+                }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-ID": auth["client_id"], "Content-Type": "application/json"})
+    r1 = response.json()
+    r2 = response2.json()
+    print(f"Response for {callbacks[user['login']]} {response.status_code}: {response}")
+    print(f'IDs Online: {r1["data"][0]["id"]} Offline: {r2["data"][0]["id"]}')
     print("Done")
