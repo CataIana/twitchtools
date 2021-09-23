@@ -437,7 +437,7 @@ class RecieverCommands(commands.Cog):
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{twitch_username}",
+                        "callback": f"{self.bot.auth['callback_url']}/callback/{twitch_username}",
                         "secret": callbacks[twitch_username]["secret"]
                     }
                 }, method="post")
@@ -450,7 +450,7 @@ class RecieverCommands(commands.Cog):
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{twitch_username}",
+                        "callback": f"{self.bot.auth['callback_url']}/callback/{twitch_username}",
                         "secret": callbacks[twitch_username]["secret"]
                     }
                 }, method="post")

@@ -99,7 +99,7 @@ while run:
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{user['login'].lower()}",
+                        "callback": f"{auth['callback_url']}/callback/{user['login'].lower()}",
                         "secret": channel["secret"]
                     }
                 }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-ID": auth["client_id"], "Content-Type": "application/json"})
@@ -112,7 +112,7 @@ while run:
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"https://twitchtools-callback.catalana.dev/callback/{user['login'].lower()}",
+                        "callback": f"{auth['callback_url']}/callback/{user['login'].lower()}",
                         "secret": channel["secret"]
                     }
                 }, headers={"Authorization": f"Bearer {auth['oauth']}", "Client-ID": auth["client_id"], "Content-Type": "application/json"})
