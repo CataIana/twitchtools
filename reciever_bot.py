@@ -5,7 +5,7 @@ from systemd.daemon import notify, Notification
 from aiohttp import ClientSession
 import json
 from datetime import datetime
-#from time import time
+from dateutil.tz import tzlocal
 from systemd.journal import JournaldLogHandler
 import logging
 from time import time
@@ -209,10 +209,11 @@ class TwitchCallBackBot(commands.Bot):
                 except NotFound:
                     pass
         #Send live alert message
+        stream_start_time = datetime.strptime(stream_info["started_at"], "%Y-%m-%dT%H:%M:%S%z").replace(tzinfo=None) + datetime.now(tzlocal()).utcoffset() #Add timedelta for timezone offset
         embed = Embed(
             title=stream_info["title"], url=f"https://twitch.tv/{stream_info['user_login']}",
             description=f"Playing {stream_info['game_name']} for {stream_info['viewer_count']} viewers\n[Watch Stream](https://twitch.tv/{stream_info['user_login']})",
-            colour=8465372, timestamp=datetime.strptime(stream_info["started_at"], "%Y-%m-%dT%H:%M:%S%z").replace(tzinfo=None))
+            colour=8465372, timestamp=stream_start_time)
         embed.set_author(name=f"{stream_info['user_name']} is now live on Twitch!", url=f"https://twitch.tv/{stream_info['user_login']}")
         embed.set_footer(text="Mew")
         SelfOverride = PermissionOverwrite()
