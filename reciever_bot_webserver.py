@@ -46,7 +46,7 @@ class RecieverWebServer():
             self.bot.log.info(f"Timestamp: {request.headers['Twitch-Eventsub-Message-Timestamp']}")
             #self.bot.log.info(f"Expected: {expected_signature}. Receieved: {request.headers['Twitch-Eventsub-Message-Signature']}")
             if request.headers['Twitch-Eventsub-Message-Signature'] != expected_signature:
-                return web.Response(status=400)
+                return False
             notifcache.append(message_id)
             if len(notifcache) > 10: notifcache = notifcache[1:]
             async with aiofiles.open("notifcache.cache", "w") as f:
