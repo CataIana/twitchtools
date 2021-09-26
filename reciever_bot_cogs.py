@@ -609,6 +609,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command()
+    @is_admin()
     async def addtitlechange(self, ctx):
         embed = Embed(
             title="Step 1 - Streamer",
