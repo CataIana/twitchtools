@@ -1,5 +1,6 @@
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType
 from aiohttp import ClientSession
+from discord.errors import HTTPException
 from discord.ext import commands
 from systemd.daemon import notify, Notification
 from aiohttp import ClientSession
@@ -69,14 +70,7 @@ class TwitchCallBackBot(commands.Bot):
 
     async def api_request(self, url, session=None, method="get", **kwargs):
         session = session or self.aSession
-        if method == "get":
-            response = await session.get(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-        elif method == "post":
-            response = await session.post(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-        elif method == "delete":
-            response = await session.delete(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-        else:
-            return None
+        response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
         if response.status == 401: #Reauth pog
             reauth = await session.post(url=f"https://id.twitch.tv/oauth2/token?client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=client_credentials")
             if reauth.status == 401:
@@ -86,14 +80,7 @@ class TwitchCallBackBot(commands.Bot):
             self.auth["oauth"] = reauth_data["access_token"]
             async with aiofiles.open("auth.json", "w") as f:
                 await f.write(json.dumps(self.auth, indent=4))
-            if method == "get":
-                response = await session.get(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-            elif method == "post":
-                response = await session.post(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-            elif method == "delete":
-                response = await session.delete(url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-            else:
-                return None
+            response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
         else:
             return response
 
@@ -114,6 +101,72 @@ class TwitchCallBackBot(commands.Bot):
                 await self.streamer_offline(streamer)
             else:
                 await self.streamer_online(streamer, [x for x in response["data"] if x["user_login"] == streamer][0])
+
+    async def title_change(self, streamer, stream_info):
+        try:
+            async with aiofiles.open("titlecache.cache") as f:
+                title_cache = json.loads(await f.read())
+        except FileNotFoundError:
+            title_cache = {}
+        except json.decoder.JSONDecodeError:
+            title_cache = {}
+        old_title = title_cache.get(streamer, {}).get("cached_title", "<no title>")
+        old_game = title_cache.get(streamer, {}).get("cached_game", "<no game>")
+        #Prevent errors with empty content values
+        if stream_info["event"]["title"] == "":
+            stream_info["event"]["title"] = "<no title>"
+        if stream_info["event"]["category_name"] == "":
+            stream_info["event"]["category_name"] = "<no game>"
+        updated = []
+        if stream_info["event"]["title"] != old_title:
+            updated.append("title")
+        if stream_info["event"]["category_name"] != old_game:
+            updated.append("game")
+
+        title_cache[streamer] = {
+            "cached_title": stream_info["event"]["title"],
+            "cached_game": stream_info["event"]["category_name"],
+        }
+
+        async with aiofiles.open("titlecache.cache", "w") as f:
+            await f.write(json.dumps(title_cache, indent=4))
+
+        if updated == []:
+            self.log.info(f"No title updates for {streamer}, ignoring")
+            return
+
+        embed = Embed(description=f"{stream_info['event']['broadcaster_user_name']} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=datetime.utcnow())
+        if stream_info["event"]["title"] != old_title:
+            embed.add_field(name="Old Title", value=old_title, inline=True)
+            embed.add_field(name="New Title", value=stream_info["event"]["title"], inline=True)
+        if stream_info["event"]["category_name"] != old_game:
+            embed.add_field(name="Old Game", value=old_game, inline=True)
+            embed.add_field(name="New Game", value=stream_info["event"]["category_name"], inline=True)
+        embed.set_author(name=f"Stream Link", url=f"https://twitch.tv/{stream_info['event']['broadcaster_user_login']}")
+        embed.set_footer(text="Mew")
+
+        async with aiofiles.open("title_callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+
+        self.log.info(f"Sending title update for {streamer}")
+
+        for data in callbacks[streamer]["alert_roles"].values():
+            c = self.get_channel(data["channel_id"])
+            if c is not None:
+                if data['role_id'] is None:
+                    role_mention = ""
+                elif data["role_id"] == "everyone":
+                    role_mention = "@everyone"
+                else:
+                    role_mention = f"<@&{data['role_id']}>"
+                try:
+                    await c.send(f"{role_mention}", embed=embed)
+                except Forbidden:
+                    pass
+                except HTTPException:
+                    pass
+            else:
+                self.log.warning("Invalid channel")
 
 
     async def streamer_offline(self, streamer):

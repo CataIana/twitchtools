@@ -510,26 +510,29 @@ class RecieverCommands(commands.Cog):
         alert_channel = self.bot.get_channel(alert_channels.get(str(ctx.guild.id), None))
         if alert_channel is not None:
             alert_channel = alert_channel.mention
-        uwu = f"Guild Alert Channel: {alert_channel}```nim\n{'Channel':15s} {'Alert Role':25s} {'Channel Override':18s} Alert Mode \n"
+        uwu = f"Guild Alert Channel: {alert_channel}```nim\n{'Channel':15s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode \n"
         for x, y in callback_info.items():
             if str(ctx.guild.id) in y["alert_roles"].keys():
                 info = y["alert_roles"][str(ctx.guild.id)]
-                alert_role = info.get("role_id", None)
-                try:
-                    int(alert_role)
-                except ValueError:
-                    pass
+                alert_role = info.get("role_id", "")
+                if alert_role is None:
+                    alert_role = "<No Alert Role>"
                 else:
-                    alert_role = ctx.guild.get_role(alert_role)
-                    if alert_role is not None:
-                        alert_role = alert_role.name
+                    try:
+                        int(alert_role)
+                    except ValueError:
+                        pass
                     else:
-                        alert_role = ""
+                        alert_role = ctx.guild.get_role(alert_role)
+                        if alert_role is not None:
+                            alert_role = alert_role.name
+                        else:
+                            alert_role = ""
 
                 channel_override = info.get("channel_override", None)
                 channel_override = ctx.guild.get_channel(channel_override)
                 if channel_override is not None:
-                    channel_override = channel_override.name
+                    channel_override = "#" + channel_override.name
                 else:
                     channel_override = ""
 
@@ -538,6 +541,46 @@ class RecieverCommands(commands.Cog):
                     await ctx.send(uwu)
                     uwu = "```nim\n"
                 uwu += f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n"
+        uwu += "```"
+        await ctx.send(uwu)
+
+    @commands.command(aliases=["titlechanges"])
+    @is_admin()
+    async def listtitlechanges(self, ctx):
+        async with aiofiles.open("title_callbacks.json") as f:
+            callback_info = json.loads(await f.read())
+
+        uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
+        for x, y in callback_info.items():
+            if str(ctx.guild.id) in y["alert_roles"].keys():
+                info = y["alert_roles"][str(ctx.guild.id)]
+                alert_role = info.get("role_id", "")
+                if alert_role is None:
+                    alert_role = "<No Alert Role>"
+                else:
+                    try:
+                        int(alert_role)
+                    except ValueError:
+                        pass
+                    else:
+                        alert_role = ctx.guild.get_role(alert_role)
+                        if alert_role is not None:
+                            alert_role = alert_role.name
+                        else:
+                            alert_role = ""
+
+                alert_channel = info.get("channel_id", None)
+                alert_channel = ctx.guild.get_channel(alert_channel)
+                if alert_channel is not None:
+                    alert_channel = "#" + alert_channel.name
+                else:
+                    alert_channel = ""
+
+                if len(uwu + f"{x:15s} {alert_role:35s} {alert_channel:18s}\n") > 1800:
+                    uwu += "```"
+                    await ctx.send(uwu)
+                    uwu = "```nim\n"
+                uwu += f"{x:15s} {alert_role:35s} {alert_channel:18s}\n"
         uwu += "```"
         await ctx.send(uwu)
 
@@ -563,6 +606,240 @@ class RecieverCommands(commands.Cog):
         async with aiofiles.open("callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
         embed = Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
+        await ctx.send(embed=embed)
+
+    @commands.command()
+    async def addtitlechange(self, ctx):
+        embed = Embed(
+            title="Step 1 - Streamer",
+            description="Please provide a twitch streamer url or username.",
+            color=self.bot.colour
+        )
+        embed.set_footer(text="Setup will timeout after 3 minutes of no response.")
+        setup_message = await ctx.send(embed=embed)
+        def check(m):
+            if ctx.author != m.author:
+                return False
+            twitch_username = m.content.split("/")[-1].lower()
+            response = requests.get(url=f"https://api.twitch.tv/helix/users?login={twitch_username}", headers={"Client-ID": self.bot.auth["client_id"], "Authorization": f"Bearer {self.bot.auth['oauth']}"})
+            json_obj = response.json()
+            if len(json_obj["data"]) == 1:
+                return True
+        try:
+            username_message = await self.bot.wait_for("message", timeout=180.0, check=check)
+        except asyncio.TimeoutError:
+            await setup_message.delete()
+            return
+        try:
+            await username_message.delete()
+        except Forbidden:
+            pass
+        twitch_username = username_message.content.split("/")[-1].lower()
+        async with aiofiles.open("title_callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+        
+        warning = None
+        if str(ctx.guild.id) in callbacks.get(twitch_username, {}).get("alert_roles", {}).keys():
+            warning = await ctx.send_noreply("Warning. This streamer has already been setup for this channel. Continuing will override the previously set settings.")
+
+        response = await self.bot.api_request(f"https://api.twitch.tv/helix/users?login={twitch_username}", method="get")
+        json_obj = await response.json()
+        twitch_userid = json_obj["data"][0]["id"]
+
+        embed = Embed(
+            title="Step 2 - Role",
+            description=f"Please tag, write the name of, or the ID of the role you would like to be pinged when {twitch_username} changes their title. If you do not want an role, type 'no'. If you want to mention everyone, type 'everyone'",
+            color=self.bot.colour
+        )
+        await setup_message.edit(embed=embed)
+
+        def check(m):
+            if m.author == ctx.author and m.content in ["no", "everyone"]:
+                return True
+            if len(m.role_mentions) == 1 and m.author == ctx.author:
+                return True
+            try:
+                int(m.content)
+            except ValueError:
+                if [role for role in ctx.guild.roles if role.name.lower() == m.content.lower()] != []:
+                    return True
+            else:
+                if ctx.guild.get_role(int(m.content)) != None:
+                    return True
+        invalid_message_id = True
+        while invalid_message_id:
+            try:
+                setup_role_msg = await self.bot.wait_for("message", timeout=180.0, check=check)
+                if warning is not None:
+                    await warning.delete()
+                if setup_role_msg.content == "no":
+                    invalid_message_id = False
+                    alert_role = "no"
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
+                if setup_role_msg.content == "everyone":
+                    invalid_message_id = False
+                    alert_role = "everyone"
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
+                if len(setup_role_msg.role_mentions) == 1:
+                    alert_role = setup_role_msg.role_mentions[0]
+                    if alert_role.position < ctx.guild.me.top_role.position:
+                        invalid_message_id = False
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
+                role = [role for role in ctx.guild.roles[1:] if role.name.lower() == setup_role_msg.content.lower()]
+                if role != []:
+                    alert_role = role[0]
+                    invalid_message_id = False
+                    try:
+                        await setup_role_msg.delete()
+                    except Forbidden:
+                        pass
+                    except NotFound:
+                        pass
+                try:
+                    int(setup_role_msg.content)
+                except ValueError:
+                    pass
+                else:
+                    role = ctx.guild.get_role(int(setup_role_msg.content))
+                    if role != None:
+                        alert_role = role
+                        invalid_message_id = False
+                        try:
+                            await setup_role_msg.delete()
+                        except Forbidden:
+                            pass
+            except asyncio.TimeoutError:
+                await setup_message.delete()
+                return
+    
+        embed = Embed(
+            title="Step 3 - Notification Channel",
+            description=f"Please tag the channel that you would like notifcations to be sent in.",
+            color=self.bot.colour
+        )
+        await setup_message.edit(embed=embed)
+        def check(m):
+            return ctx.author == m.author and len(m.channel_mentions) == 1
+        valid = False
+        temp = None
+        while not valid:
+            try:
+                notification_channel_message = await self.bot.wait_for("message", timeout=180.0, check=check)
+            except asyncio.TimeoutError:
+                await setup_message.delete()
+                return
+            try:
+                await notification_channel_message.delete()
+            except Forbidden:
+                pass
+            if temp is not None:
+                await temp.delete()
+            notification_channel = notification_channel_message.channel_mentions[0]
+            notification_channel_perms = notification_channel.permissions_for(ctx.guild.me)
+            if notification_channel_perms.view_channel == False:
+                embed = Embed(
+                title="Bad permissions!",
+                description=f"Bot is unable to see {notification_channel.mention}! Please check the bot permissions and try again.",
+                color=self.bot.colour
+                )
+                temp = await ctx.send(embed=embed)
+                valid = False
+                continue
+            if notification_channel_perms.read_message_history == False:
+                embed = Embed(
+                title="Bad permissions!",
+                description=f"Bot is unable to see message history in {notification_channel.mention}! Please check the bot permissions and try again.",
+                color=self.bot.colour
+                )
+                temp = await ctx.send(embed=embed)
+                valid = False
+                continue
+            if notification_channel_perms.send_messages == False:
+                embed = Embed(
+                title="Bad permissions!",
+                description=f"Bot is unable to send messages in {notification_channel.mention}! Please check the bot permissions and try again.",
+                color=self.bot.colour
+                )
+                temp = await ctx.send(embed=embed)
+                valid = False
+                continue
+            valid = True
+    
+
+        if twitch_username not in callbacks.keys():
+            callbacks[twitch_username] = {"channel_id": twitch_userid, "secret": await random_string_generator(21), "alert_roles": {}}
+            response = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "channel.update",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": twitch_userid
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"{self.bot.auth['callback_url']}/titlecallback/{twitch_username}",
+                        "secret": callbacks[twitch_username]["secret"]
+                    }
+                }, method="post")
+            if response.status not in [202, 409]:
+                return await ctx.send(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status} {await response.json()}")
+            json1 = await response.json()
+            callbacks[twitch_username]["subscription_id"] = json1["data"][0]["id"]
+        callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)] = {}
+        if alert_role == "everyone":
+            callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            alert_role_string = "@everyone"
+        elif alert_role == "no":
+            callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            alert_role_string = "No Role"
+        else:
+            callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
+            alert_role_string = alert_role.mention
+        callbacks[twitch_username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = notification_channel.id
+
+
+        async with aiofiles.open("title_callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+        
+        embed = Embed(
+            title="Setup Complete",
+            color=self.bot.colour
+        )
+        embed.add_field(name="Streamer", value=twitch_username, inline=True)
+        embed.add_field(name="Alert Role", value=alert_role_string, inline=True)
+        embed.add_field(name="Notification Channel", value=notification_channel.mention, inline=True)
+        await setup_message.edit(embed=embed)
+
+    @commands.command(aliases=["deltitlechange"])
+    @is_admin()
+    async def removetitlechange(self, ctx, streamer: str):
+        async with aiofiles.open("title_callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+        try:
+            del callbacks[streamer]["alert_roles"][str(ctx.guild.id)]
+        except KeyError:
+            embed = Embed(title="Error", description="Username not found for guild.", colour=self.bot.colour)
+            await ctx.send(embed=embed)
+            return
+        if callbacks[streamer]["alert_roles"] == {}:
+            self.bot.log.info(f"Streamer {streamer} has no more alerts, purging")
+            try:
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['subscription_id']}", method="delete")
+            except KeyError:
+                pass
+            del callbacks[streamer]
+        async with aiofiles.open("title_callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+        embed = Embed(title="Streamer Removed", description=f"Deleted title change alert for {streamer}", colour=self.bot.colour)
         await ctx.send(embed=embed)
 
             

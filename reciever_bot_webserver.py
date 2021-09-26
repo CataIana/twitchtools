@@ -10,7 +10,7 @@ class RecieverWebServer():
         self.bot = bot
         self.port = 18271
         self.web_server = web.Application()
-        self.web_server.add_routes([web.route('*', '/callback/{channel}', self._reciever)])
+        self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
 
     async def start(self):
         runner = web.AppRunner(self.web_server)
@@ -22,18 +22,19 @@ class RecieverWebServer():
     async def _reciever(self, request):
         await self.bot.wait_until_ready()
         channel = request.match_info["channel"]
+        callback_type = request.match_info["callback_type"]
         self.bot.log.info(f"{request.method} from {channel}")
         if request.method == 'POST':
-            return await self.post_request(request, channel)
-        return await self.get_request(request, channel)
+            return await self.post_request(request, callback_type, channel)
+        #return await self.get_request(request, channel)
+        return web.Response(status=404)
 
-    async def verify_request(self, request, channel, secret):
+    async def verify_request(self, request, secret):
         try: #Verify request
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
             try:
                 async with aiofiles.open("notifcache.cache") as f:
                     notifcache = json.loads(await f.read())
-                    
             except FileNotFoundError:
                 notifcache = []
             except json.decoder.JSONDecodeError:
@@ -43,8 +44,8 @@ class RecieverWebServer():
             hmac_message = request.headers["Twitch-Eventsub-Message-Id"].encode("utf-8") + request.headers["Twitch-Eventsub-Message-Timestamp"].encode("utf-8") + await request.read()
             h = hmac.new(secret.encode("utf-8"), hmac_message, hashlib.sha256)
             expected_signature = f"sha256={h.hexdigest()}"
-            self.bot.log.info(f"Timestamp: {request.headers['Twitch-Eventsub-Message-Timestamp']}")
-            #self.bot.log.info(f"Expected: {expected_signature}. Receieved: {request.headers['Twitch-Eventsub-Message-Signature']}")
+            self.bot.log.debug(f"Timestamp: {request.headers['Twitch-Eventsub-Message-Timestamp']}")
+            self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {request.headers['Twitch-Eventsub-Message-Signature']}")
             if request.headers['Twitch-Eventsub-Message-Signature'] != expected_signature:
                 return False
             notifcache.append(message_id)
@@ -56,14 +57,18 @@ class RecieverWebServer():
             self.bot.log.info(f"Request Denied. Missing Key {e}")
             return False
 
-    async def post_request(self, request, channel):
-        async with aiofiles.open("callbacks.json") as f:
-            callbacks = json.loads(await f.read())
+    async def post_request(self, request, callback_type, channel):
+        if callback_type == "titlecallback":
+            async with aiofiles.open("title_callbacks.json") as f:
+                callbacks = json.loads(await f.read())
+        else:
+            async with aiofiles.open("callbacks.json") as f:
+                callbacks = json.loads(await f.read())
         if channel not in callbacks.keys():
             self.bot.log.info(f"Request for {channel} not found")
             return web.Response(status=404)
 
-        verified = await self.verify_request(request, channel, callbacks[channel]["secret"])
+        verified = await self.verify_request(request, callbacks[channel]["secret"])
         if verified == False:
             self.bot.log.info("Unverified request, aborting")
             return web.Response(status=400)
@@ -78,17 +83,38 @@ class RecieverWebServer():
         data = await request.json()
         
         if mode == "webhook_callback_verification": #Initial Verification of Subscription
-            self.bot.log.info(f"Subscription confirmed for {channel}")
+            if callback_type == "titlecallback":
+                self.bot.log.info(f"Title Change Subscription confirmed for {channel}")
+            else:
+                self.bot.log.info(f"Subscription confirmed for {channel}")
             challenge = data['challenge']
             return web.Response(status=202, text=challenge)
         elif mode == "authorization_revoked":
-            self.bot.log.critical(f"Authorization Revoked for {channel}!")
+            if callback_type == "titlecallback":
+                self.bot.log.critical(f"Title Change Authorization Revoked for {channel}!")
+            else:
+                self.bot.log.critical(f"Authorization Revoked for {channel}!")
         elif mode == "notification":
-            self.bot.log.info(f"Notification for {channel}")
-            await self.notification(channel, data)
+            if callback_type == "titlecallback":
+                self.bot.log.info(f"Title Change Notification for {channel}")
+                return await self.title_notification(channel, data)
+            else:
+                self.bot.log.info(f"Notification for {channel}")
+                return await self.notification(channel, data)
         else:
             self.bot.loog.info("Unknown mode")
         return web.Response(status=404)
+
+    async def title_notification(self, channel, data):
+        r = await self.bot.api_request(f"https://api.twitch.tv/helix/streams?user_login={channel}")
+        r_j = await r.json()
+        live = False if r_j["data"] == [] else True
+        if not live:
+            await self.bot.title_change(channel, data)
+        else:
+            self.bot.log.info(f"{channel} is live, ignoring title change")
+
+        return web.Response(status=202)
 
     async def notification(self, channel, data):
         channel = data.get("broadcaster_user_login", channel)

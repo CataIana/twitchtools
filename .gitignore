@@ -7,3 +7,5 @@ __pycache__
 *.log
 *.backup
 test.py
+titlecache.cache
+title_callbacks.json
