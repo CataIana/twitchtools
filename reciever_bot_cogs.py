@@ -1,5 +1,7 @@
 from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound, Forbidden
 from discord.ext import commands, tasks
+from discord.utils import utcnow
+import discord
 import json
 import asyncio
 import requests
@@ -9,6 +11,55 @@ from types import BuiltinFunctionType, FunctionType, MethodType
 from random import choice
 from string import ascii_letters
 import aiofiles
+from os import getpid
+import sys
+import psutil
+from enum import Enum
+
+class TimezoneOptions(Enum):
+    short_date = "d" #07/10/2021
+    month_day_year_time = "f" #July 10, 2021 1:21 PM
+    time = "t" #1:21 PM
+    short_date2 = "D" #July 10, 2021
+    full_date_time = "F" #Saturday, July 10, 2021 1:21 PM
+    long_ago = "R" #6 minutes ago
+    long_time = "T" #1:21:08 PM
+
+
+def DiscordTimezone(utc, format: TimezoneOptions):
+    return f"<t:{int(utc)}:{format.value}>"
+
+class pretty_time:
+    def __init__(self, unix, duration=False):
+        unix = float(unix)
+        if not duration:
+            self.unix_diff = time() - unix
+        else:
+            self.unix_diff = unix
+        self.unix = unix
+        self.years = int(str(self.unix_diff // 31536000).split('.')[0])
+        self.days = int(str(self.unix_diff // 86400 % 365).split('.')[0])
+        self.hours = int(str(self.unix_diff // 3600 % 24).split('.')[0])
+        self.minutes = int(str(self.unix_diff // 60 % 60).split('.')[0])
+        self.seconds = int(str(self.unix_diff % 60).split('.')[0])
+        timezone_datetime = datetime.fromtimestamp(unix)
+        self.datetime = timezone_datetime.strftime('%I:%M:%S %p %Y-%m-%d %Z')
+
+        self.dict = {"days": self.days, "hours": self.hours, "minutes": self.minutes, "seconds": self.seconds, "datetime": self.datetime}
+
+        full = []
+        if self.years != 0:
+            full.append(f"{self.years} {'year' if self.years == 1 else 'years'}")
+        if self.days != 0:
+            full.append(f"{self.days} {'day' if self.days == 1 else 'days'}")
+        if self.hours != 0:
+            full.append(f"{self.hours} {'hour' if self.hours == 1 else 'hours'}")
+        if self.minutes != 0:
+            full.append(f"{self.minutes} {'minute' if self.minutes == 1 else 'minutes'}")
+        if self.seconds != 0:
+            full.append(f"{self.seconds} {'second' if self.seconds == 1 else 'seconds'}")
+        full = (', '.join(full[0:-1]) + " and " + ' '.join(full[-1:])) if len(full) > 1 else ', '.join(full)
+        self.prettify = full
 
 def is_mod():
     async def predicate(ctx):
@@ -101,6 +152,34 @@ class RecieverCommands(commands.Cog):
         await self.bot.catchup_streamers()
         self.bot.log.info("Finished streamer catchup")
         await ctx.send("Finished catchup!")
+
+    @commands.command(description="Responds with bot information such as memory usage and version", aliases=["status", "botinfo", "bot"])
+    async def botstatus(self, ctx):
+        p = pretty_time(self.bot._uptime)
+        embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
+        if self.bot.owner_id is None:
+            owner_objs = [str(self.bot.get_user(user)) for user in self.bot.owner_ids]
+            owners = ', '.join(owner_objs).rstrip(", ")
+            is_plural = False
+            if len(owner_objs) > 1:
+                is_plural = True
+        else:
+            owners = await self.bot.fetch_user(self.bot.owner_id)
+            is_plural = False
+        async with aiofiles.open("callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+        alert_count = 0
+        for data in callbacks.values():
+            alert_count += len(data["alert_roles"].values())
+        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {p.prettify}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len([c for c in self.bot.walk_commands()])}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
+        embed.add_field(name="__Bot__", value=botinfo, inline=False)
+        memory = psutil.virtual_memory()
+        cpu_freq = psutil.cpu_freq()
+        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Discord.py Version:** {discord.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**<:microprocessor:879591544070488074> System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
+        embed.add_field(name="__System__", value=systeminfo, inline=False)
+        embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
+        embed.set_footer(text=f"Client ID: {self.bot.user.id}")
+        await ctx.send(embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 5, commands.BucketType.member)
