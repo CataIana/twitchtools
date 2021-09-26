@@ -20,7 +20,7 @@ class TwitchCallBackBot(commands.Bot):
         intents = Intents.none()
         intents.guilds = True
         intents.messages = True
-        super().__init__(command_prefix=commands.when_mentioned_or("t!"), case_insensitive=True, intents=intents)
+        super().__init__(command_prefix=commands.when_mentioned_or("t!"), case_insensitive=True, intents=intents, activity=Activity(type=ActivityType.listening, name="t!help"))
 
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
@@ -63,7 +63,6 @@ class TwitchCallBackBot(commands.Bot):
     async def on_ready(self):
         #await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
-        await self.change_presence(activity=Activity(type=ActivityType.listening, name="stream status"))
         notify(Notification.READY)
 
     async def on_message(self, message): return
