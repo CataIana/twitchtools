@@ -1,17 +1,16 @@
-from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType
-from aiohttp import ClientSession
-from discord.errors import HTTPException
+from json.decoder import JSONDecodeError
+from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType, HTTPException
 from discord.ext import commands
-from systemd.daemon import notify, Notification
+from reciever_bot_webserver import RecieverWebServer
 from aiohttp import ClientSession
-import json
 from datetime import datetime
 from dateutil.tz import tzlocal
+from systemd.daemon import notify, Notification
 from systemd.journal import JournaldLogHandler
-import logging
 from time import time
 import aiofiles
-from reciever_bot_webserver import RecieverWebServer
+import logging
+import json
 
 
 
@@ -85,21 +84,24 @@ class TwitchCallBackBot(commands.Bot):
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        async with aiofiles.open("callbacks.json") as f:
-            callback_info = json.loads(await f.read())
-        chunks = [list(callback_info.keys())[x:x+100] for x in range(0, len(list(callback_info.keys())), 100)]
+        try:
+            async with aiofiles.open("callbacks.json") as f:
+                callbacks = json.loads(await f.read())
+        except FileNotFoundError:
+            return
+        except JSONDecodeError:
+            return
+        chunks = [[c["channel_id"] for c in callbacks.values()][x:x+100] for x in range(0, len([c["channel_id"] for c in callbacks.values()]), 100)] #Split list of streamers into chunks of 100.
         online_streams = []
-        for chunk in chunks:
-            response = await self.api_request(f"https://api.twitch.tv/helix/streams?user_login={'&user_login='.join(chunk)}")
+        for chunk in chunks: #Fetch chunks and create list of online streams
+            response = await self.api_request(f"https://api.twitch.tv/helix/streams?user_id={'&user_id='.join(chunk)}")
             response = await response.json()
-            if response.get("error", None) is not None:
-                self.log.critical("Invalid oauth token!")
-            online_streams += [stream["user_login"] for stream in response["data"]]
-        for streamer in callback_info.keys():
-            if streamer not in online_streams:
+            online_streams += [stream["user_id"] for stream in response["data"]]
+        for streamer, data in callbacks.items(): #Iterate through all callbacks and run
+            if data["channel_id"] not in online_streams:
                 await self.streamer_offline(streamer)
             else:
-                await self.streamer_online(streamer, [x for x in response["data"] if x["user_login"] == streamer][0])
+                await self.streamer_online(streamer, [x for x in response["data"] if x["user_id"] == data["channel_id"]][0])
 
     async def title_change(self, streamer, stream_info):
         try:
@@ -116,23 +118,24 @@ class TwitchCallBackBot(commands.Bot):
             stream_info["event"]["title"] = "<no title>"
         if stream_info["event"]["category_name"] == "":
             stream_info["event"]["category_name"] = "<no game>"
-        updated = []
+
+        updated = [] #Quick way to make the dynamic title
         if stream_info["event"]["title"] != old_title:
             updated.append("title")
         if stream_info["event"]["category_name"] != old_game:
             updated.append("game")
 
-        title_cache[streamer] = {
+        if updated == []: #If for some reason neither the title or game updated, just ignore
+            self.log.info(f"No title updates for {streamer}, ignoring")
+            return
+
+        title_cache[streamer] = { #Update cached data
             "cached_title": stream_info["event"]["title"],
             "cached_game": stream_info["event"]["category_name"],
         }
 
         async with aiofiles.open("titlecache.cache", "w") as f:
             await f.write(json.dumps(title_cache, indent=4))
-
-        if updated == []:
-            self.log.info(f"No title updates for {streamer}, ignoring")
-            return
 
         embed = Embed(description=f"{stream_info['event']['broadcaster_user_name']} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=datetime.utcnow())
         if stream_info["event"]["title"] != old_title:
@@ -230,9 +233,6 @@ class TwitchCallBackBot(commands.Bot):
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
             only_channel = True
-        #if list(channel_cache.get(streamer, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
-        #    self.log.info(f"Ignoring alert while live for {streamer}")
-        #    return
         temp = dict(channel_cache.get(streamer, {"alert_cooldown": 0}))
         del temp["alert_cooldown"]
         if list(temp.keys()) != []:

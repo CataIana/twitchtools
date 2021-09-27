@@ -16,6 +16,7 @@ import sys
 import psutil
 from enum import Enum
 
+
 class TimezoneOptions(Enum):
     short_date = "d" #07/10/2021
     month_day_year_time = "f" #July 10, 2021 1:21 PM

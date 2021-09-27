@@ -26,36 +26,40 @@ class RecieverWebServer():
         self.bot.log.info(f"{request.method} from {channel}")
         if request.method == 'POST':
             return await self.post_request(request, callback_type, channel)
-        #return await self.get_request(request, channel)
         return web.Response(status=404)
 
     async def verify_request(self, request, secret):
-        try: #Verify request
+        try:
+            async with aiofiles.open("notifcache.cache") as f:
+                notifcache = json.loads(await f.read())
+        except FileNotFoundError:
+            notifcache = []
+        except json.decoder.JSONDecodeError:
+            notifcache = []
+
+        try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
-            try:
-                async with aiofiles.open("notifcache.cache") as f:
-                    notifcache = json.loads(await f.read())
-            except FileNotFoundError:
-                notifcache = []
-            except json.decoder.JSONDecodeError:
-                notifcache = []
-            if message_id in notifcache:
-                return None
-            hmac_message = request.headers["Twitch-Eventsub-Message-Id"].encode("utf-8") + request.headers["Twitch-Eventsub-Message-Timestamp"].encode("utf-8") + await request.read()
-            h = hmac.new(secret.encode("utf-8"), hmac_message, hashlib.sha256)
-            expected_signature = f"sha256={h.hexdigest()}"
-            self.bot.log.debug(f"Timestamp: {request.headers['Twitch-Eventsub-Message-Timestamp']}")
-            self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {request.headers['Twitch-Eventsub-Message-Signature']}")
-            if request.headers['Twitch-Eventsub-Message-Signature'] != expected_signature:
-                return False
-            notifcache.append(message_id)
-            if len(notifcache) > 10: notifcache = notifcache[1:]
-            async with aiofiles.open("notifcache.cache", "w") as f:
-                await f.write(json.dumps(notifcache, indent=4))
-            return True
+            timestamp = request.headers["Twitch-Eventsub-Message-Timestamp"]
+            signature = request.headers['Twitch-Eventsub-Message-Signature']
         except KeyError as e:
             self.bot.log.info(f"Request Denied. Missing Key {e}")
             return False
+        if message_id in notifcache:
+            return None
+
+        hmac_message = message_id.encode("utf-8") + timestamp.encode("utf-8") + await request.read()
+        h = hmac.new(secret.encode("utf-8"), hmac_message, hashlib.sha256)
+        expected_signature = f"sha256={h.hexdigest()}"
+        self.bot.log.debug(f"Timestamp: {timestamp}")
+        self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {signature}")
+        if signature != expected_signature:
+            return False
+        notifcache.append(message_id)
+        if len(notifcache) > 10: notifcache = notifcache[1:]
+        async with aiofiles.open("notifcache.cache", "w") as f:
+            await f.write(json.dumps(notifcache, indent=4))
+        return True
+            
 
     async def post_request(self, request, callback_type, channel):
         if callback_type == "titlecallback":
@@ -94,6 +98,7 @@ class RecieverWebServer():
                 self.bot.log.critical(f"Title Change Authorization Revoked for {channel}!")
             else:
                 self.bot.log.critical(f"Authorization Revoked for {channel}!")
+            return web.Response(status=202)
         elif mode == "notification":
             if callback_type == "titlecallback":
                 self.bot.log.info(f"Title Change Notification for {channel}")

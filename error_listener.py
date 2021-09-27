@@ -61,9 +61,5 @@ class ErrorListener(commands.Cog):
         error_str = str(exc).replace("\\", "\\\\")[:1900]
         await channel.send(f"```python\nException in command {ctx.command}\n{error_str}\n```")
 
-    @commands.Cog.listener()
-    async def on_ipc_error(self, endpoint, error):
-        self.bot.log.error(endpoint, "raised", error)
-
 def setup(bot):
     bot.add_cog(ErrorListener(bot))
