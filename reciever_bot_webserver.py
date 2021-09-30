@@ -4,7 +4,6 @@ import json
 import hmac
 import hashlib
 import aiofiles
-from time import time
 
 class RecieverWebServer():
     def __init__(self, bot):

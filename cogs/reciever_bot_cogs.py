@@ -1,4 +1,4 @@
-from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound, Forbidden, HTTPException
+from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound, HTTPException
 from discord.ext import commands, tasks
 from discord.utils import utcnow
 from dislash import slash_command, Option, OptionType, OptionChoice, is_owner, SlashInteraction, BadArgument, BotMissingPermissions, ApplicationCommandError
