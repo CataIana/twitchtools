@@ -11,6 +11,7 @@ from time import time
 import aiofiles
 import logging
 import json
+from dislash import InteractionClient
 
 
 
@@ -34,7 +35,7 @@ class TwitchCallBackBot(commands.Bot):
         jhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(jhandler)
 
-
+        self.slash = InteractionClient(self)
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
         
@@ -60,7 +61,6 @@ class TwitchCallBackBot(commands.Bot):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        #await self.catchup_streamers()
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
         notify(Notification.READY)
 
@@ -153,7 +153,7 @@ class TwitchCallBackBot(commands.Bot):
         self.log.info(f"Sending title update for {streamer}")
 
         for data in callbacks[streamer]["alert_roles"].values():
-            c = self.get_channel(data["channel_id"])
+            c = self.get_channel(data["notif_channel_id"])
             if c is not None:
                 if data['role_id'] is None:
                     role_mention = ""
@@ -228,8 +228,6 @@ class TwitchCallBackBot(commands.Bot):
             channel_cache = {}
         async with aiofiles.open("callbacks.json") as f:
             callback_info = json.loads(await f.read())
-        async with aiofiles.open("alert_channels.json") as f:
-            alert_channels = json.loads(await f.read())
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
             only_channel = True
@@ -291,7 +289,7 @@ class TwitchCallBackBot(commands.Bot):
                 if not only_channel:
                     alert_channel_id = alert_info.get("channel_override", None)
                     if alert_channel_id == None:
-                        alert_channel_id = alert_channels.get(guild_id, None)
+                        alert_channel_id = alert_info.get("notif_channel_id", None)
                     alert_channel = self.get_channel(alert_channel_id)
                     if alert_channel is not None:
                         try:
