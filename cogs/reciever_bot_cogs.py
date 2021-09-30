@@ -156,7 +156,7 @@ class RecieverCommands(commands.Cog):
         else:
             owners = await self.bot.fetch_user(self.bot.owner_id)
             is_plural = False
-        async with aiofiles.open("callbacks.json") as f:
+        async with aiofiles.open("config/callbacks.json") as f:
             callbacks = json.loads(await f.read())
         alert_count = 0
         for data in callbacks.values():
@@ -329,7 +329,7 @@ class RecieverCommands(commands.Cog):
 
         #Create file structure and subscriptions if necessary
         try:
-            async with aiofiles.open("callbacks.json") as f:
+            async with aiofiles.open("config/callbacks.json") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
             callbacks = {}
@@ -382,7 +382,7 @@ class RecieverCommands(commands.Cog):
         if alert_mode == 2:
             callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
 
-        async with aiofiles.open("callbacks.json", "w") as f:
+        async with aiofiles.open("config/callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
         #Run catchup on streamer immediately
@@ -408,7 +408,7 @@ class RecieverCommands(commands.Cog):
     @has_guild_permissions(administrator=True)
     async def liststreamers(self, ctx):
         try:
-            async with aiofiles.open("callbacks.json") as f:
+            async with aiofiles.open("config/callbacks.json") as f:
                 callback_info = json.loads(await f.read())
         except FileNotFoundError:
             await ctx.send("Error reading config files. Please try again later", ephemeral=True)
@@ -457,7 +457,7 @@ class RecieverCommands(commands.Cog):
     @slash_command(description="List all the active title change alerts setup in this server")
     @has_guild_permissions(administrator=True)
     async def listtitlechanges(self, ctx):
-        async with aiofiles.open("title_callbacks.json") as f:
+        async with aiofiles.open("config/title_callbacks.json") as f:
             callback_info = json.loads(await f.read())
         ephemeral = True
         uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
@@ -514,7 +514,7 @@ class RecieverCommands(commands.Cog):
 
         #Create file structure and subscriptions if necessary
         try:
-            async with aiofiles.open("title_callbacks.json") as f:
+            async with aiofiles.open("config/title_callbacks.json") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
             callbacks = {}
@@ -548,7 +548,7 @@ class RecieverCommands(commands.Cog):
         else:
             callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
 
-        async with aiofiles.open("title_callbacks.json", "w") as f:
+        async with aiofiles.open("config/title_callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
         embed = Embed(title="Successfully added new title change alert", color=self.bot.colour)
@@ -569,7 +569,7 @@ class RecieverCommands(commands.Cog):
 
     async def callback_deletion(self, ctx, streamer, config_file, _type="status"):
         try:
-            async with aiofiles.open(config_file) as f:
+            async with aiofiles.open(f"config/{config_file}") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
             callbacks = {}
@@ -592,7 +592,7 @@ class RecieverCommands(commands.Cog):
             except KeyError:
                 pass
             del callbacks[streamer]
-        async with aiofiles.open(config_file, "w") as f:
+        async with aiofiles.open(f"config/{config_file}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
         if _type == "title":
             embed = Embed(title="Streamer Removed", description=f"Deleted title change alert for {streamer}", colour=self.bot.colour)

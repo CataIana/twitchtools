@@ -1,10 +1,9 @@
-auth.json
-callbacks.json
-emote_sync.json
-*.cache
 __pycache__
+auth.json
+emote_sync.json
+callbacks.json
+title_callbacks.json
+cache/*
 *.log
 *.backup
 test.py
-titlecache.cache
-title_callbacks.json

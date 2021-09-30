@@ -1,0 +1,7 @@
+{
+    "client_id": "Twitch client ID",
+    "client_secret": "Twitch client secret",
+    "oauth": "This value will automatically be filled by the script.",
+    "bot_token": "Discord bot token",
+    "callback_url": "Your callback url. Example: https://example.com"
+}

@@ -19,9 +19,9 @@ class EmoteSync(commands.Cog):
     async def sync_emotes(self):
         await self.bot.wait_until_ready()
         self.bot.log.info("Starting emote sync...")
-        async with aiofiles.open("emote_sync.json") as f:
+        async with aiofiles.open("config/emote_sync.json") as f:
             emote_sync = json.loads(await f.read())
-        async with aiofiles.open("auth.json") as f:
+        async with aiofiles.open("config/auth.json") as f:
             auth = json.loads(await f.read())
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
@@ -70,7 +70,7 @@ class EmoteSync(commands.Cog):
 
             self.bot.log.info("Finished syncing.")
 
-            async with aiofiles.open("emote_sync.json", "w") as f:
+            async with aiofiles.open("config/emote_sync.json", "w") as f:
                 await f.write(json.dumps(emote_sync, indent=4))
         
     async def ffz_add_to_discord(self, emote_sync, guild_id, emote):

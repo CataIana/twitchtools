@@ -66,14 +66,12 @@ def random_string_generator(str_size):
 run = True
 while run:
     try:
-        with open("callbacks.json") as f:
+        with open("config/callbacks.json") as f:
             callbacks = j_load(f)
     except FileNotFoundError:
-        with open("callbacks.json", "w") as f:
-            f.write("{}")
         callbacks = {}
     try:
-        with open("auth.json") as f:
+        with open("config/auth.json") as f:
             auth = j_load(f)
     except FileNotFoundError:
         raise TypeError("No Client ID file provided")
@@ -86,7 +84,7 @@ while run:
         continue
     user = json_obj["data"][0]
     callbacks[user["name"].lower()] = {"channel_id": user["id"], "secret": random_string_generator(21)}
-    with open("callbacks.json", "w") as f:
+    with open("config/callbacks.json", "w") as f:
         f.write(j_print(callbacks, indent=4))
     print("Running subscription post")
     channel = callbacks[user["name"].lower()]

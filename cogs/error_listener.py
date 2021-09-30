@@ -3,7 +3,7 @@ import dislash
 from traceback import format_exc, format_exception
 from urllib3.exceptions import ProtocolError
 from asyncio import TimeoutError
-from reciever_bot_cogs import SubscriptionError
+from cogs.reciever_bot_cogs import SubscriptionError
 
 class ErrorListener(commands.Cog):
     def __init__(self, bot):

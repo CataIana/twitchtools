@@ -25,7 +25,7 @@ class TwitchCallBackBot(commands.Bot):
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
 
-        fhandler = logging.FileHandler(filename="twitchcallbacks.log", encoding="utf-8", mode="a+")
+        fhandler = logging.FileHandler(filename="twitchcallbacks.log", encoding="utf-8", mode="w")
         fhandler.setLevel(logging.INFO)
         fhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(fhandler)
@@ -39,11 +39,11 @@ class TwitchCallBackBot(commands.Bot):
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
         
-        self.load_extension(f"reciever_bot_cogs")
-        self.load_extension(f"emotes_sync")
-        self.load_extension(f"error_listener")
+        self.load_extension(f"cogs.reciever_bot_cogs")
+        self.load_extension(f"cogs.emotes_sync")
+        self.load_extension(f"cogs.error_listener")
         self.colour = Colour.from_rgb(128, 0, 128)
-        with open("auth.json") as f:
+        with open("config/auth.json") as f:
             self.auth = json.load(f)
         self.token = self.auth["bot_token"]
         self._uptime = time()
@@ -76,7 +76,7 @@ class TwitchCallBackBot(commands.Bot):
                 await self.close()
             reauth_data = await reauth.json()
             self.auth["oauth"] = reauth_data["access_token"]
-            async with aiofiles.open("auth.json", "w") as f:
+            async with aiofiles.open("config/auth.json", "w") as f:
                 await f.write(json.dumps(self.auth, indent=4))
             response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
         else:
@@ -85,7 +85,7 @@ class TwitchCallBackBot(commands.Bot):
     async def catchup_streamers(self):
         await self.wait_until_ready()
         try:
-            async with aiofiles.open("callbacks.json") as f:
+            async with aiofiles.open("config/callbacks.json") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
             return
@@ -105,7 +105,16 @@ class TwitchCallBackBot(commands.Bot):
 
     async def title_change(self, streamer, stream_info):
         try:
-            async with aiofiles.open("titlecache.cache") as f:
+            async with aiofiles.open("config/title_callbacks.json") as f:
+                callbacks = json.loads(await f.read())
+        except FileNotFoundError:
+            self.bot.log.error("Failed to read title callbacks config file!")
+            return
+        except JSONDecodeError:
+            self.bot.log.error("Failed to read title callbacks config file!")
+            return
+        try:
+            async with aiofiles.open("cache/titlecache.cache") as f:
                 title_cache = json.loads(await f.read())
         except FileNotFoundError:
             title_cache = {}
@@ -134,7 +143,7 @@ class TwitchCallBackBot(commands.Bot):
             "cached_game": stream_info["event"]["category_name"],
         }
 
-        async with aiofiles.open("titlecache.cache", "w") as f:
+        async with aiofiles.open("cache/titlecache.cache", "w") as f:
             await f.write(json.dumps(title_cache, indent=4))
 
         embed = Embed(description=f"{stream_info['event']['broadcaster_user_name']} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=datetime.utcnow())
@@ -146,9 +155,6 @@ class TwitchCallBackBot(commands.Bot):
             embed.add_field(name="New Game", value=stream_info["event"]["category_name"], inline=True)
         embed.set_author(name=f"Stream Link", url=f"https://twitch.tv/{stream_info['event']['broadcaster_user_login']}")
         embed.set_footer(text="Mew")
-
-        async with aiofiles.open("title_callbacks.json") as f:
-            callbacks = json.loads(await f.read())
 
         self.log.info(f"Sending title update for {streamer}")
 
@@ -173,13 +179,13 @@ class TwitchCallBackBot(commands.Bot):
 
     async def streamer_offline(self, streamer):
         try:
-            async with aiofiles.open("channelcache.cache") as f:
+            async with aiofiles.open("cache/channelcache.cache") as f:
                 channel_cache = json.loads(await f.read())
         except FileNotFoundError:
             channel_cache = {}
         except json.decoder.JSONDecodeError:
             channel_cache = {}
-        async with aiofiles.open("callbacks.json") as f:
+        async with aiofiles.open("config/callbacks.json") as f:
             callback_info = json.loads(await f.read())
         if streamer in channel_cache.keys():
             if channel_cache[streamer].get("live_channels", None) is None or channel_cache[streamer].get("live_alerts", None) is None:
@@ -215,18 +221,18 @@ class TwitchCallBackBot(commands.Bot):
                                 self.log.warning(f"Error editing message to offline in {channel.guild.name}")
             if channel_cache[streamer].get("live_alerts", None) is not None:
                 del channel_cache[streamer]["live_alerts"]
-            async with aiofiles.open("channelcache.cache", "w") as f:
+            async with aiofiles.open("cache/channelcache.cache", "w") as f:
                 await f.write(json.dumps(channel_cache, indent=4))
 
     async def streamer_online(self, streamer, stream_info):
         try:
-            async with aiofiles.open("channelcache.cache") as f:
+            async with aiofiles.open("cache/channelcache.cache") as f:
                 channel_cache = json.loads(await f.read())
         except FileNotFoundError:
             channel_cache = {}
         except json.decoder.JSONDecodeError:
             channel_cache = {}
-        async with aiofiles.open("callbacks.json") as f:
+        async with aiofiles.open("config/callbacks.json") as f:
             callback_info = json.loads(await f.read())
         only_channel = False
         if int(time()) - channel_cache.get(streamer, {}).get("alert_cooldown", 0) < 600:
@@ -326,7 +332,7 @@ class TwitchCallBackBot(commands.Bot):
                     else:
                         self.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {streamer}")
         channel_cache[streamer] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
-        async with aiofiles.open("channelcache.cache", "w") as f:
+        async with aiofiles.open("cache/channelcache.cache", "w") as f:
             await f.write(json.dumps(channel_cache, indent=4))
 
 

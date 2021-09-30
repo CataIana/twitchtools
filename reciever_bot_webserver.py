@@ -1,3 +1,4 @@
+from json.decoder import JSONDecodeError
 from aiohttp import web
 import json
 import hmac
@@ -30,7 +31,7 @@ class RecieverWebServer():
 
     async def verify_request(self, request, secret):
         try:
-            async with aiofiles.open("notifcache.cache") as f:
+            async with aiofiles.open("cache/notifcache.cache") as f:
                 notifcache = json.loads(await f.read())
         except FileNotFoundError:
             notifcache = []
@@ -56,18 +57,25 @@ class RecieverWebServer():
             return False
         notifcache.append(message_id)
         if len(notifcache) > 10: notifcache = notifcache[1:]
-        async with aiofiles.open("notifcache.cache", "w") as f:
+        async with aiofiles.open("cache/notifcache.cache", "w") as f:
             await f.write(json.dumps(notifcache, indent=4))
         return True
             
 
     async def post_request(self, request, callback_type, channel):
-        if callback_type == "titlecallback":
-            async with aiofiles.open("title_callbacks.json") as f:
-                callbacks = json.loads(await f.read())
-        else:
-            async with aiofiles.open("callbacks.json") as f:
-                callbacks = json.loads(await f.read())
+        try:
+            if callback_type == "titlecallback":
+                async with aiofiles.open("config/title_callbacks.json") as f:
+                    callbacks = json.loads(await f.read())
+            else:
+                async with aiofiles.open("config/callbacks.json") as f:
+                    callbacks = json.loads(await f.read())
+        except FileNotFoundError:
+            self.bot.log.error("Failed to read title callbacks config file!")
+            return
+        except JSONDecodeError:
+            self.bot.log.error("Failed to read title callbacks config file!")
+            return
         if channel not in callbacks.keys():
             self.bot.log.info(f"Request for {channel} not found")
             return web.Response(status=404)
