@@ -13,14 +13,11 @@ import logging
 import json
 from dislash import InteractionClient
 
-
-
 class TwitchCallBackBot(commands.Bot):
     def __init__(self):
         intents = Intents.none()
         intents.guilds = True
-        intents.messages = True
-        super().__init__(command_prefix=commands.when_mentioned_or("t!"), case_insensitive=True, intents=intents, activity=Activity(type=ActivityType.listening, name="t!help"))
+        super().__init__(command_prefix=commands.when_mentioned_or("t!"), intents=intents, activity=Activity(type=ActivityType.listening, name="stream status"))
 
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
@@ -38,7 +35,7 @@ class TwitchCallBackBot(commands.Bot):
         self.slash = InteractionClient(self)
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
-        
+
         self.load_extension(f"cogs.reciever_bot_cogs")
         self.load_extension(f"cogs.emotes_sync")
         self.load_extension(f"cogs.error_listener")
@@ -63,8 +60,6 @@ class TwitchCallBackBot(commands.Bot):
     async def on_ready(self):
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
         notify(Notification.READY)
-
-    async def on_message(self, message): return
 
     async def api_request(self, url, session=None, method="get", **kwargs):
         session = session or self.aSession

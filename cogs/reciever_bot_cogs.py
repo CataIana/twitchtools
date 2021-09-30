@@ -88,52 +88,52 @@ class RecieverCommands(commands.Cog):
     async def on_slash_command(self, ctx):
         self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
 
-    class CustomContext(commands.Context):
-        async def send(self, content=None, **kwargs):
-            allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
-            kwargs.pop("ephemeral", None) #Remove possible slash command attributes
-            try:
-                return await self.reply(content, **kwargs, allowed_mentions=allowed_mentions)
-            except HTTPException:
-                return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
+    # class CustomContext(commands.Context):
+    #     async def send(self, content=None, **kwargs):
+    #         allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
+    #         kwargs.pop("ephemeral", None) #Remove possible slash command attributes
+    #         try:
+    #             return await self.reply(content, **kwargs, allowed_mentions=allowed_mentions)
+    #         except HTTPException:
+    #             return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
 
-        async def send_noreply(self, content=None, **kwargs):
-            allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
-            return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
+    #     async def send_noreply(self, content=None, **kwargs):
+    #         allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
+    #         return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.content == "Pong!" and message.author == self.bot.user:
-            rest = int(((utcnow() - message.created_at).microseconds)/1000)
-            gateway = int(self.bot.latency*1000)
-            await message.edit(content=f"Pong! `{rest}ms` Rest | `{gateway}ms` Gateway")
+    # @commands.Cog.listener()
+    # async def on_message(self, message):
+    #     # if message.content == "Pong!" and message.author == self.bot.user:
+    #     #     rest = int(((utcnow() - message.created_at).microseconds)/1000)
+    #     #     gateway = int(self.bot.latency*1000)
+    #     #     await message.edit(content=f"Pong! `{rest}ms` Rest | `{gateway}ms` Gateway")
 
-        if message.channel.type == ChannelType.private:
-            return
+    #     if message.channel.type == ChannelType.private:
+    #         return
 
-        p = message.channel.permissions_for(message.guild.me)
-        if not p.send_messages and not p.embed_links:
-            return
+    #     p = message.channel.permissions_for(message.guild.me)
+    #     if not p.send_messages and not p.embed_links:
+    #         return
 
-        if message.author.bot or message.author == self.bot.user:
-            return
+    #     if message.author.bot or message.author == self.bot.user:
+    #         return
 
-        ctx = await self.bot.get_context(message, cls=self.CustomContext)
-        await self.bot.invoke(ctx)
+    #     ctx = await self.bot.get_context(message, cls=self.CustomContext)
+    #     await self.bot.invoke(ctx)
 
     @slash_command(description="Responds with the bots latency to discords servers")
     async def ping(self, ctx):
-        await ctx.send(content="Pong!") #Message cannot be ephemeral for ping updates to show
+        gateway = int(self.bot.latency*1000)
+        await ctx.send(f"Pong! `{gateway}ms` Gateway") #Message cannot be ephemeral for ping updates to show
 
     @slash_command(description="Owner Only: Reload the bot cogs and listeners")
     @is_owner()
     async def reload(self, ctx):
-        await ctx.channel.trigger_typing()
         cog_count = 0
         for ext_name in dict(self.bot.extensions).keys():
             cog_count += 1
             self.bot.reload_extension(ext_name)
-        await ctx.send(content=f"<:green_tick:809191812434231316> Succesfully reloaded! Reloaded {cog_count} cogs!", ephemeral=True)
+        await ctx.send(f"<:green_tick:809191812434231316> Succesfully reloaded! Reloaded {cog_count} cogs!", ephemeral=True)
     
     @slash_command(description="Owner Only: Run streamer catchup manually")
     @is_owner()
@@ -169,7 +169,7 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
         embed.set_footer(text=f"Client ID: {self.bot.user.id}")
-        await ctx.send(embed=embed, ephemeral=True)
+        await ctx.send(embed=embed)
 
     @slash_command(description="Get how long the bot has been running")
     async def uptime(self, ctx):
@@ -402,7 +402,7 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Alert Mode", value=alert_mode, inline=True)
         if alert_mode == 2:
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
-        await ctx.send(embed=embed, ephemeral=True)
+        await ctx.send(embed=embed)
 
     @slash_command(description="List all the active streamer alerts setup in this server")
     @has_guild_permissions(administrator=True)
@@ -418,7 +418,6 @@ class RecieverCommands(commands.Cog):
             return            
 
         uwu = f"```nim\n{'Channel':15s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode \n"
-        ephemeral = True
         for x, y in callback_info.items():
             if str(ctx.guild.id) in y["alert_roles"].keys():
                 info = y["alert_roles"][str(ctx.guild.id)]
@@ -447,19 +446,17 @@ class RecieverCommands(commands.Cog):
 
                 if len(uwu + f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n") > 1800:
                     uwu += "```"
-                    ephemeral = False
                     await ctx.send(uwu)
                     uwu = "```nim\n"
                 uwu += f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n"
         uwu += "```"
-        await ctx.send(uwu, ephemeral=ephemeral)
+        await ctx.send(uwu)
 
     @slash_command(description="List all the active title change alerts setup in this server")
     @has_guild_permissions(administrator=True)
     async def listtitlechanges(self, ctx):
         async with aiofiles.open("config/title_callbacks.json") as f:
             callback_info = json.loads(await f.read())
-        ephemeral = True
         uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
         for x, y in callback_info.items():
             if str(ctx.guild.id) in y["alert_roles"].keys():
@@ -488,12 +485,11 @@ class RecieverCommands(commands.Cog):
 
                 if len(uwu + f"{x:15s} {alert_role:35s} {alert_channel:18s}\n") > 1800:
                     uwu += "```"
-                    ephemeral = False
                     await ctx.send(uwu)
                     uwu = "```nim\n"
                 uwu += f"{x:15s} {alert_role:35s} {alert_channel:18s}\n"
         uwu += "```"
-        await ctx.send(uwu, ephemeral=ephemeral)
+        await ctx.send(uwu)
 
     @slash_command(description="Add alerts for the specific streamer", options=[
         Option("streamer", description="The streamer username you want to add the alert for", type=OptionType.STRING, required=True),
@@ -555,7 +551,7 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Streamer", value=streamer, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         embed.add_field(name="Alert Role", value=role, inline=True)
-        await ctx.send(embed=embed, ephemeral=True)
+        await ctx.send(embed=embed)
 
     @slash_command(description="Remove a live notification alert", options=[Option("streamer", "The name of the streamer to be removed", type=OptionType.STRING, required=True)])
     @has_guild_permissions(administrator=True)
@@ -600,7 +596,7 @@ class RecieverCommands(commands.Cog):
             embed = Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
         else:
             return
-        return await ctx.send(embed=embed, ephemeral=True)
+        return await ctx.send(embed=embed)
 
 
             
