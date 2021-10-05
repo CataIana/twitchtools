@@ -74,6 +74,7 @@ class TwitchCallBackBot(commands.Bot):
             async with aiofiles.open("config/auth.json", "w") as f:
                 await f.write(json.dumps(self.auth, indent=4))
             response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
+            return response
         else:
             return response
 

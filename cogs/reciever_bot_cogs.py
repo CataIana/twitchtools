@@ -598,6 +598,85 @@ class RecieverCommands(commands.Cog):
             return
         return await ctx.send(embed=embed)
 
+    @slash_command(guild_ids=[749646865531928628])
+    @is_owner()
+    async def resubscribe(self, ctx):
+        self.bot.log.info("Running live alert resubscribe")
+        async with aiofiles.open("config/callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+        for streamer, data in callbacks.items():
+            await asyncio.sleep(0.2)
+            if data.get("online_id", None) is not None:
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['online_id']}", method="delete")
+            response1 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.online",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": data["channel_id"]
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
+                        "secret": data["secret"]
+                    }
+                }, method="post")
+            if response1.status in [409, 401]:
+                return await ctx.send(f"Error subscribing online {streamer}")
+            rj1 = await response1.json()
+            await asyncio.sleep(0.2)
+            callbacks[streamer]["online_id"] = rj1["data"][0]["id"]
+            if data.get("offline_id", None) is not None:
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['offline_id']}", method="delete")
+            response2 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "stream.offline",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": data["channel_id"]
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
+                        "secret": data["secret"]
+                    }
+                }, method="post")
+            if response2.status in [409, 401]:
+                return await ctx.send(f"Error subscribing offline {streamer}")
+            rj2 = await response2.json()
+            callbacks[streamer]["offline_id"] = rj2["data"][0]["id"]
+        async with aiofiles.open(f"config/callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+        self.bot.log.info("Running title resubscribe")
+        async with aiofiles.open("config/title_callbacks.json") as f:
+            callbacks = json.loads(await f.read())
+        for streamer, data in callbacks.items():
+            await asyncio.sleep(0.2)
+            if data.get("subscription_id", None) is not None:
+                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['subscription_id']}", method="delete")
+            response1 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
+                json={
+                    "type": "channel.update",
+                    "version": "1",
+                    "condition": {
+                        "broadcaster_user_id": data["channel_id"]
+                    },
+                    "transport": {
+                        "method": "webhook",
+                        "callback": f"{self.bot.auth['callback_url']}/titlecallback/{streamer}",
+                        "secret": data["secret"]
+                    }
+                }, method="post")
+            if response1.status in [409, 401]:
+                return await ctx.send(f"Error subscribing online {streamer}")
+            rj1 = await response1.json()
+            await asyncio.sleep(0.2)
+            callbacks[streamer]["subscription_id"] = rj1["data"][0]["id"]
+        async with aiofiles.open(f"config/title_callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+        await ctx.send("Done")
+                
+
 
             
 async def random_string_generator(str_size):
