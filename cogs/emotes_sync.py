@@ -1,3 +1,4 @@
+from json.decoder import JSONDecodeError
 from discord import Forbidden, HTTPException
 from discord.ext import commands, tasks
 import json
@@ -18,12 +19,17 @@ class EmoteSync(commands.Cog):
 
     async def sync_emotes(self):
         await self.bot.wait_until_ready()
+        try:
+            async with aiofiles.open("config/emote_sync.json") as f:
+                emote_sync = json.loads(await f.read())
+        except FileNotFoundError:
+            return
+        except JSONDecodeError:
+            return
         self.bot.log.info("Starting emote sync...")
-        async with aiofiles.open("config/emote_sync.json") as f:
-            emote_sync = json.loads(await f.read())
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
-                user = self.bot.api.get_user(user_id=data["streamer"])
+                user = self.bot.api.get_user(user_login=data["streamer"])
                 if user is None:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue
