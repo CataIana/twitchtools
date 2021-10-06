@@ -1,7 +1,7 @@
-from discord import ChannelType, Embed, TextChannel, AllowedMentions, NotFound, HTTPException
+from discord import Embed, TextChannel, NotFound
 from discord.ext import commands, tasks
 from discord.utils import utcnow
-from dislash import slash_command, Option, OptionType, OptionChoice, is_owner, SlashInteraction, BadArgument, BotMissingPermissions, ApplicationCommandError
+from dislash import slash_command, Option, OptionType, OptionChoice, is_owner, SlashInteraction, BadArgument, BotMissingPermissions
 from dislash import has_guild_permissions
 import discord
 import json
@@ -17,11 +17,8 @@ from os import getpid
 import sys
 import psutil
 from enum import Enum
-
-
-class SubscriptionError(ApplicationCommandError):
-    def __init__(self, message = None):
-        super().__init__(message or "There was an error handling the eventsub subscription")
+from util.subscriptions import SubscriptionType
+from exceptions import TwitchToolsException
 
 class TimezoneOptions(Enum):
     short_date = "d" #07/10/2021
@@ -69,7 +66,7 @@ class pretty_time:
 
 class RecieverCommands(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchToolsException = bot
         super().__init__()
         self.bot.help_command = None
         self.backup_checks.start()
@@ -87,39 +84,6 @@ class RecieverCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_slash_command(self, ctx):
         self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
-
-    # class CustomContext(commands.Context):
-    #     async def send(self, content=None, **kwargs):
-    #         allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
-    #         kwargs.pop("ephemeral", None) #Remove possible slash command attributes
-    #         try:
-    #             return await self.reply(content, **kwargs, allowed_mentions=allowed_mentions)
-    #         except HTTPException:
-    #             return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
-
-    #     async def send_noreply(self, content=None, **kwargs):
-    #         allowed_mentions = kwargs.pop("allowed_mentions", AllowedMentions(everyone=False, roles=False, replied_user=(True if self.author in self.message.mentions else False)))
-    #         return await super().send(content, **kwargs, allowed_mentions=allowed_mentions)
-
-    # @commands.Cog.listener()
-    # async def on_message(self, message):
-    #     # if message.content == "Pong!" and message.author == self.bot.user:
-    #     #     rest = int(((utcnow() - message.created_at).microseconds)/1000)
-    #     #     gateway = int(self.bot.latency*1000)
-    #     #     await message.edit(content=f"Pong! `{rest}ms` Rest | `{gateway}ms` Gateway")
-
-    #     if message.channel.type == ChannelType.private:
-    #         return
-
-    #     p = message.channel.permissions_for(message.guild.me)
-    #     if not p.send_messages and not p.embed_links:
-    #         return
-
-    #     if message.author.bot or message.author == self.bot.user:
-    #         return
-
-    #     ctx = await self.bot.get_context(message, cls=self.CustomContext)
-    #     await self.bot.invoke(ctx)
 
     @slash_command(description="Responds with the bots latency to discords servers")
     async def ping(self, ctx):
@@ -277,12 +241,10 @@ class RecieverCommands(commands.Cog):
                         pass
 
     async def check_streamer(self, username):
-        response = await self.bot.api_request(f"https://api.twitch.tv/helix/users?login={username}")
-        r_json = await response.json()
-        if r_json["data"] != []:
-            return r_json["data"][0]
-        else:
+        user = await self.bot.api.get_user(user_login=username)
+        if user is None:
             return False
+        return user
 
     async def check_channel_permissions(self, ctx, channel):
         if isinstance(channel, int): channel = self.bot.get_channel(channel)
@@ -338,40 +300,10 @@ class RecieverCommands(commands.Cog):
         
         if streamer not in callbacks.keys():
             callbacks[streamer] = {"channel_id": streamer_info["id"], "secret": await random_string_generator(21), "alert_roles": {}}
-            response = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "stream.online",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": streamer_info["id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
-                        "secret": callbacks[streamer]["secret"]
-                    }
-                }, method="post")
-            response2 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "stream.offline",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": streamer_info["id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
-                        "secret": callbacks[streamer]["secret"]
-                    }
-                }, method="post")
-            if response.status not in [202, 409]:
-                raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
-            if response2.status not in [202, 409]:
-                raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
-            json1 = await response.json()
-            json2 = await response2.json()
-            callbacks[streamer]["online_id"] = json1["data"][0]["id"]
-            callbacks[streamer]["offline_id"] = json2["data"][0]["id"]
+            sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
+            sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
+            callbacks[streamer]["online_id"] = sub1["data"][0]["id"]
+            callbacks[streamer]["offline_id"] = sub2["data"][0]["id"]
         callbacks[streamer]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
         if role == None:
             callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
@@ -386,14 +318,13 @@ class RecieverCommands(commands.Cog):
             await f.write(json.dumps(callbacks, indent=4))
 
         #Run catchup on streamer immediately
-        response = await self.bot.api_request(f"https://api.twitch.tv/helix/streams?user_login={streamer}")
-        response = await response.json()
-        if response["data"] == []:
+        stream_status = self.bot.api.get_stream(user_login=streamer)
+        if stream_status is None:
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
             await self.bot.streamer_offline(streamer)
         else:
-            await self.bot.streamer_online(streamer, response["data"][0])
+            await self.bot.streamer_online(streamer, stream_status)
 
         embed = Embed(title="Successfully added new streamer", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer, inline=True)
@@ -519,23 +450,8 @@ class RecieverCommands(commands.Cog):
         
         if streamer not in callbacks.keys():
             callbacks[streamer] = {"channel_id": streamer_info["id"], "secret": await random_string_generator(21), "alert_roles": {}}
-            response = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "channel.update",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": streamer_info["id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/titlecallback/{streamer}",
-                        "secret": callbacks[streamer]["secret"]
-                    }
-                }, method="post")
-            if response.status not in [202, 409]:
-                raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
-            json1 = await response.json()
-            callbacks[streamer]["subscription_id"] = json1["data"][0]["id"]
+            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
+            callbacks[streamer]["subscription_id"] = sub["data"][0]["id"]
         callbacks[streamer]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
         if role == None:
             callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
@@ -581,10 +497,10 @@ class RecieverCommands(commands.Cog):
             self.bot.log.info(f"Streamer {streamer} has no more alerts, purging")
             try:
                 if _type == "title":
-                    await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['subscription_id']}", method="delete")
+                    await self.bot.api.delete_subscription(callbacks[streamer]['subscription_id'])
                 elif _type == "status":
-                    await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['offline_id']}", method="delete")
-                    await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={callbacks[streamer]['online_id']}", method="delete")
+                    await self.bot.api.delete_subscription(callbacks[streamer]['offline_id'])
+                    await self.bot.api.delete_subscription(callbacks[streamer]['online_id'])
             except KeyError:
                 pass
             del callbacks[streamer]
@@ -607,43 +523,13 @@ class RecieverCommands(commands.Cog):
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
             if data.get("online_id", None) is not None:
-                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['online_id']}", method="delete")
-            response1 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "stream.online",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": data["channel_id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
-                        "secret": data["secret"]
-                    }
-                }, method="post")
-            if response1.status in [409, 401]:
-                return await ctx.send(f"Error subscribing online {streamer}")
-            rj1 = await response1.json()
+                await self.bot.api.delete_subscription(data["online_id"])
+            rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
             await asyncio.sleep(0.2)
             callbacks[streamer]["online_id"] = rj1["data"][0]["id"]
             if data.get("offline_id", None) is not None:
-                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['offline_id']}", method="delete")
-            response2 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "stream.offline",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": data["channel_id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/callback/{streamer}",
-                        "secret": data["secret"]
-                    }
-                }, method="post")
-            if response2.status in [409, 401]:
-                return await ctx.send(f"Error subscribing offline {streamer}")
-            rj2 = await response2.json()
+                await self.bot.api.delete_subscription(data["offline_id"])
+            rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM.OFFLINE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2["data"][0]["id"]
         async with aiofiles.open(f"config/callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
@@ -653,25 +539,10 @@ class RecieverCommands(commands.Cog):
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
             if data.get("subscription_id", None) is not None:
-                await self.bot.api_request(f"https://api.twitch.tv/helix/eventsub/subscriptions?id={data['subscription_id']}", method="delete")
-            response1 = await self.bot.api_request("https://api.twitch.tv/helix/eventsub/subscriptions",
-                json={
-                    "type": "channel.update",
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": data["channel_id"]
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.bot.auth['callback_url']}/titlecallback/{streamer}",
-                        "secret": data["secret"]
-                    }
-                }, method="post")
-            if response1.status in [409, 401]:
-                return await ctx.send(f"Error subscribing online {streamer}")
-            rj1 = await response1.json()
+                await self.bot.api.delete_subscription(data["subscription_id"])
+            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
             await asyncio.sleep(0.2)
-            callbacks[streamer]["subscription_id"] = rj1["data"][0]["id"]
+            callbacks[streamer]["subscription_id"] = sub["data"][0]["id"]
         async with aiofiles.open(f"config/title_callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
         await ctx.send("Done")

@@ -21,18 +21,13 @@ class EmoteSync(commands.Cog):
         self.bot.log.info("Starting emote sync...")
         async with aiofiles.open("config/emote_sync.json") as f:
             emote_sync = json.loads(await f.read())
-        async with aiofiles.open("config/auth.json") as f:
-            auth = json.loads(await f.read())
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
-                json_obj = await (await self.bot.aSession.get(url=f"https://api.twitch.tv/helix/users?login={data['streamer']}", headers={"Client-ID": auth["client_id"], "Authorization": f"Bearer {auth['oauth']}"})).json()
-                if "error" in json_obj.keys():
-                    self.bot.log.error(f"Error {json_obj['error']}: {json_obj['message']}")
-                    continue
-                if json_obj["data"] == []:
+                user = self.bot.api.get_user(user_id=data["streamer"])
+                if user is None:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue
-                user_id = json_obj["data"][0]["id"]
+                user_id = user["id"]
                 emote_sync[guild_id]["streamer_id"] = user_id
             else:
                 user_id = data.get("streamer_id")

@@ -2,8 +2,7 @@ from discord.errors import Forbidden
 from discord.ext import commands
 import dislash
 from traceback import format_exc, format_exception
-from asyncio import TimeoutError
-from cogs.reciever_bot_cogs import SubscriptionError
+from exceptions import SubscriptionError
 
 class ErrorListener(commands.Cog):
     def __init__(self, bot):

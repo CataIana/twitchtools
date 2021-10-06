@@ -1,10 +1,10 @@
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType, HTTPException
 from discord.ext import commands
-from reciever_bot_webserver import RecieverWebServer
+from cogs.webserver import RecieverWebServer
+from util.api import http
 from aiohttp import ClientSession
 from datetime import datetime
 from dateutil.tz import tzlocal
-from systemd.daemon import notify, Notification
 from systemd.journal import JournaldLogHandler
 from json.decoder import JSONDecodeError
 from time import time
@@ -22,17 +22,13 @@ class TwitchCallBackBot(commands.Bot):
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
 
-        fhandler = logging.FileHandler(filename="twitchcallbacks.log", encoding="utf-8", mode="w")
-        fhandler.setLevel(logging.INFO)
-        fhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-        self.log.addHandler(fhandler)
-
         jhandler = JournaldLogHandler()
         jhandler.setLevel(logging.INFO)
         jhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(jhandler)
 
         self.slash = InteractionClient(self)
+        self.api = http(self, auth_file=f"config/auth.json")
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
 
@@ -44,10 +40,8 @@ class TwitchCallBackBot(commands.Bot):
             self.auth = json.load(f)
         self.token = self.auth["bot_token"]
         self._uptime = time()
-        self.aSession = None
 
     async def close(self):
-        notify(Notification.STOPPING)
         await self.aSession.close()
         self.log.info("Shutting down...")
         await super().close()
@@ -59,24 +53,6 @@ class TwitchCallBackBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
-        notify(Notification.READY)
-
-    async def api_request(self, url, session=None, method="get", **kwargs):
-        session = session or self.aSession
-        response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-        if response.status == 401: #Reauth pog
-            reauth = await session.post(url=f"https://id.twitch.tv/oauth2/token?client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=client_credentials")
-            if reauth.status == 401:
-                self.bot.log.critical("Well somethin fucked up. Check your credentials!")
-                await self.close()
-            reauth_data = await reauth.json()
-            self.auth["oauth"] = reauth_data["access_token"]
-            async with aiofiles.open("config/auth.json", "w") as f:
-                await f.write(json.dumps(self.auth, indent=4))
-            response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {self.auth['oauth']}", "Client-Id": self.auth["client_id"]}, **kwargs)
-            return response
-        else:
-            return response
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
@@ -87,17 +63,13 @@ class TwitchCallBackBot(commands.Bot):
             return
         except JSONDecodeError:
             return
-        chunks = [[c["channel_id"] for c in callbacks.values()][x:x+100] for x in range(0, len([c["channel_id"] for c in callbacks.values()]), 100)] #Split list of streamers into chunks of 100.
-        online_streams = []
-        for chunk in chunks: #Fetch chunks and create list of online streams
-            response = await self.api_request(f"https://api.twitch.tv/helix/streams?user_id={'&user_id='.join(chunk)}")
-            response = await response.json()
-            online_streams += [stream["user_id"] for stream in response["data"]]
+        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()])
+        online_streams = [stream["user_id"] for stream in streams]
         for streamer, data in callbacks.items(): #Iterate through all callbacks and run
             if data["channel_id"] not in online_streams:
                 await self.streamer_offline(streamer)
             else:
-                await self.streamer_online(streamer, [x for x in response["data"] if x["user_id"] == data["channel_id"]][0])
+                await self.streamer_online(streamer, [x for x in streams if x["user_id"] == data["channel_id"]][0])
 
     async def title_change(self, streamer, stream_info):
         try:
@@ -331,6 +303,6 @@ class TwitchCallBackBot(commands.Bot):
         async with aiofiles.open("cache/channelcache.cache", "w") as f:
             await f.write(json.dumps(channel_cache, indent=4))
 
-
-bot = TwitchCallBackBot()
-bot.run(bot.token)
+if __name__ == "__main__":
+    bot = TwitchCallBackBot()
+    bot.run(bot.token)

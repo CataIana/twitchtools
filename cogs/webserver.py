@@ -118,9 +118,10 @@ class RecieverWebServer():
         return web.Response(status=404)
 
     async def title_notification(self, channel, data):
-        r = await self.bot.api_request(f"https://api.twitch.tv/helix/streams?user_login={channel}")
-        r_j = await r.json()
-        live = False if r_j["data"] == [] else True
+        if await self.bot.api.get_stream(user_login=channel) == []:
+            live = False
+        else:
+            live = True
         if not live:
             await self.bot.title_change(channel, data)
         else:
@@ -133,11 +134,7 @@ class RecieverWebServer():
         live = True if data["subscription"]["type"] == "stream.online" else False
 
         if live:
-            response = await self.bot.api_request(f"https://api.twitch.tv/helix/streams?user_login={channel}")
-            if response.status != 200:
-                return self.bot.log.critical(f"Failed to fetch stream info!")
-            notif_json = await response.json()
-            notif_info = notif_json["data"][0]
+            notif_info = await self.bot.api.get_stream(user_login=channel)
             if notif_info["game_name"] == "":
                 notif_info["game_name"] = "<no game>"
             await self.bot.streamer_online(channel, notif_info)
