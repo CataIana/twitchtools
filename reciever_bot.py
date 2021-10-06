@@ -6,12 +6,12 @@ from util.api import http
 from aiohttp import ClientSession
 from datetime import datetime
 from dateutil.tz import tzlocal
-from systemd.journal import JournaldLogHandler
 from json.decoder import JSONDecodeError
 from time import time
 import aiofiles
 import logging
 import json
+import sys
 from dislash import InteractionClient
 
 class TwitchCallBackBot(commands.Bot):
@@ -23,10 +23,10 @@ class TwitchCallBackBot(commands.Bot):
         self.log = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
 
-        jhandler = JournaldLogHandler()
-        jhandler.setLevel(logging.INFO)
-        jhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-        self.log.addHandler(jhandler)
+        shandler = logging.StreamHandler(sys.stdout)
+        shandler.setLevel(logging.INFO)
+        shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+        self.log.addHandler(shandler)
 
         self.slash = InteractionClient(self)
         self.api = http(self, auth_file=f"config/auth.json")
