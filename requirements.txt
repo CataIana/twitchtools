@@ -1,5 +1,6 @@
-discord.py
+git+https://github.com/Rapptz/discord.py.git#egg=discord.py
 aiohttp
+asyncio
 aiofiles
 dislash.py
 psutil

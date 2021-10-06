@@ -1,8 +1,7 @@
 import aiofiles
 import json
 from aiohttp import ClientSession
-from .exceptions import *
-from .subscriptions import SubscriptionType
+from exceptions import *
 
 class http:
     def __init__(self, bot, auth_file):
