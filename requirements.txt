@@ -4,3 +4,4 @@ asyncio
 aiofiles
 dislash.py
 psutil
+python-dateutil

@@ -514,7 +514,7 @@ class RecieverCommands(commands.Cog):
             return
         return await ctx.send(embed=embed)
 
-    @slash_command(guild_ids=[749646865531928628])
+    @slash_command()
     @is_owner()
     async def resubscribe(self, ctx):
         self.bot.log.info("Running live alert resubscribe")

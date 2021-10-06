@@ -27,27 +27,23 @@ class http:
 
     async def _make_session(self):
         self.session = ClientSession()
-        await self._validate_credentials()
-
-    async def _validate_credentials(self):
-        r = await self.session.get(f"{self.oauth2_base}/validate", headers={"Authorization": f"Bearer {self.access_token}"})
-        if not r.status == 200:
-            raise BadAuthorization
 
     async def _request(self, url, method="get", **kwargs):
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
         if response.status == 401: #Refresh access token
             reauth = await self.session.post(
-                url=f"{self.oauth2_base}/token?client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=client_credentials"
+                url=f"{self.oauth2_base}/token?client_id={self.client_id}&client_secret={self.client_secret}&grant_type=client_credentials"
             )
             if reauth.status == 401:
                 raise BadAuthorization
             reauth_data = await reauth.json()
-            self.auth["access_token"] = reauth_data["access_token"]
-            self.auth["refresh_token"] = reauth_data["refresh_token"]
+            async with aiofiles.open("config/auth.json") as f:
+                auth = json.loads(await f.read())
+            auth["access_token"] = reauth_data["access_token"]
             async with aiofiles.open(self.storage, "w") as f:
-                await f.write(json.dumps(self.auth, indent=4))
-            self.headers["Authorization"] = f"Bearer {self.auth['access_token']}"
+                await f.write(json.dumps(auth, indent=4))
+            self.headers["Authorization"] = f"Bearer {reauth_data['access_token']}"
+            self.access_token = reauth_data['access_token']
             response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
             return response
         else:

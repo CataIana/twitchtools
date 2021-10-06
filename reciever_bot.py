@@ -1,4 +1,5 @@
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType, HTTPException
+import discord
 from discord.ext import commands
 from cogs.webserver import RecieverWebServer
 from util.api import http
@@ -221,13 +222,19 @@ class TwitchCallBackBot(commands.Bot):
                 format_ = "{user_name} is live! Playing {game_name}!\nhttps://twitch.tv/{user_name}".format(**stream_info)
             if type(callback_info[streamer]["webhook"]) == list:
                 for webhook in callback_info[streamer]["webhook"]:
-                    webhook_obj = Webhook.from_url(webhook, self.aSession)
+                    if discord.__version__ == "2.0.0a":
+                        webhook_obj = Webhook.from_url(webhook, session=self.aSession)
+                    else:
+                        webhook_obj = Webhook.from_url(webhook, session=discord.AsyncWebhookAdapter(self.aSession))
                     try:
                         await webhook_obj.send(content=format_)
                     except NotFound:
                         pass
             else:
-                webhook = Webhook.from_url(callback_info[streamer]["webhook"], self.aSession)
+                if discord.__version__ == "2.0.0a":
+                    webhook = Webhook.from_url(callback_info[streamer]["webhook"], session=self.aSession)
+                else:
+                    webhook_obj = Webhook.from_url(callback_info[streamer]["webhook"], session=discord.AsyncWebhookAdapter(self.aSession))
                 try:
                     await webhook.send(content=format_)
                 except NotFound:
