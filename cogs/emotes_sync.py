@@ -63,10 +63,10 @@ class EmoteSync(commands.Cog):
                 if str(id) not in bttv_emote_ids:
                     emote_sync = await self.bttv_remove_from_discord(emote_sync, guild_id, id)
 
-            self.bot.log.info("Finished syncing.")
+        self.bot.log.info("Finished syncing.")
 
-            async with aiofiles.open("config/emote_sync.json", "w") as f:
-                await f.write(json.dumps(emote_sync, indent=4))
+        async with aiofiles.open("config/emote_sync.json", "w") as f:
+            await f.write(json.dumps(emote_sync, indent=4))
         
     async def ffz_add_to_discord(self, emote_sync, guild_id, emote):
         guild = self.bot.get_guild(int(guild_id))
