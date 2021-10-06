@@ -10,3 +10,11 @@ Also has a bad implementation of syncing bttv/ffz emotes to discord
 * Install the required dependencies `sudo pipe install --upgrade -r requirements.txt` The requirements file downloads the beta version of discord.py, but should also work just fine with the most recent full release
 * The webserver runs on port `18271`, so ensure your reverse proxy forwards your callback to that port. You can change this if necessary in `webserver.py`
 * Finally, run the bot with `python3 reciever_bot.py` and you should be good to go
+
+Emote sync doesn't have an interface yet since I haven't fully finished it. If you want to try run it, create `emote_sync.json` in the config folder. The layout per guild looks like ```
+{
+  "<guild_id>": 
+  { 
+    "streamer": "<streamer_login>" 
+    }  
+}```
