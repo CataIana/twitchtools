@@ -1,10 +1,15 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 import aiofiles
 import json
 from aiohttp import ClientSession
-from exceptions import *
-from twitchtools import Subscription, User, PartialUser, Stream
-from main import TwitchCallBackBot
+from .exceptions import *
+from .subscription import Subscription
+from .user import PartialUser, User
+from .stream import Stream
 from typing import Union, List
+if TYPE_CHECKING:
+    from main import TwitchCallBackBot
 
 class http:
     def __init__(self, bot, auth_file):

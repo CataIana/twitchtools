@@ -1,10 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from json.decoder import JSONDecodeError
 from aiohttp import web
 import json
 import hmac
 import hashlib
 import aiofiles
-from main import TwitchCallBackBot
+if TYPE_CHECKING:
+    from main import TwitchCallBackBot
 
 class RecieverWebServer():
     def __init__(self, bot):

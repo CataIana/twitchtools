@@ -1,5 +1,5 @@
 from re import findall
-from exceptions import BadArgument
+from .exceptions import BadArgument
 
 class Asset:
     def __init__(self, avatar, size=None):

@@ -1,8 +1,9 @@
+from __future__ import annotations
 from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webhook, Forbidden, Activity, ActivityType, HTTPException
 import discord
 from discord.ext import commands
 from cogs.webserver import RecieverWebServer
-from twitchtools import http
+from twitchtools.api import http
 from aiohttp import ClientSession
 from datetime import datetime
 from json.decoder import JSONDecodeError

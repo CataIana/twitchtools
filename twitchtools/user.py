@@ -1,6 +1,6 @@
-from _typeshed import NoneType
 from dateutil import parser
-from twitchtools import Avatar, OfflineImage, UserType, BroadcasterType
+from .asset import Avatar, OfflineImage
+from .enums import UserType, BroadcasterType
 from datetime import datetime
 from typing import Union
 
@@ -27,9 +27,9 @@ class User(PartialUser):
         self.user_type: UserType = UserType(type)
         self.type: UserType = UserType(type)
         self.broadcaster_type: BroadcasterType = BroadcasterType(broadcaster_type)
-        self.user_description: Union[str, NoneType] = None if description == "" else description
+        self.user_description: Union[str, None] = None if description == "" else description
         self.description = None if description == "" else description
-        self.avatar: Union[Avatar, NoneType] = None if profile_image_url == "" else Avatar(profile_image_url)
-        self.offline_image: Union[OfflineImage, NoneType] = None if offline_image_url == "" else OfflineImage(offline_image_url)
+        self.avatar: Union[Avatar, None] = None if profile_image_url == "" else Avatar(profile_image_url)
+        self.offline_image: Union[OfflineImage, None] = None if offline_image_url == "" else OfflineImage(offline_image_url)
         self.view_count: int = int(view_count)
         self.created_at: datetime = parser.parse(created_at)
