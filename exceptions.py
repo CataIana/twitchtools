@@ -14,6 +14,9 @@ class HTTPException(TwitchToolsException):
 class BadRequest(TwitchToolsException):
     pass
 
+class BadArgument(TwitchToolsException):
+    pass
+
 class SubscriptionError(TwitchToolsException):
     def __init__(self, message = None):
         super().__init__(message or "There was an error handling the eventsub subscription")

@@ -17,8 +17,10 @@ from os import getpid
 import sys
 import psutil
 from enum import Enum
-from util.subscriptions import SubscriptionType
+from util.enums import SubscriptionType
 from exceptions import TwitchToolsException
+from util.user import User, PartialUser
+from util.stream import Stream
 
 class TimezoneOptions(Enum):
     short_date = "d" #07/10/2021
@@ -274,9 +276,10 @@ class RecieverCommands(commands.Cog):
     @has_guild_permissions(administrator=True)
     async def addstreamer(self, ctx: SlashInteraction, streamer, alert_mode, notification_channel, role = None, status_channel=None):
         # Run checks on all the supplied arguments
-        streamer_info = await self.check_streamer(username=streamer)
-        if not streamer_info:
-            raise BadArgument(f"Could not find twitch user {streamer}!")
+        streamer_search = streamer
+        streamer = await self.check_streamer(username=streamer)
+        if not streamer:
+            raise BadArgument(f"Could not find twitch user {streamer_search}!")
         await self.check_channel_permissions(ctx, channel=notification_channel)
         if status_channel is not None:
             await self.check_channel_permissions(ctx, channel=status_channel)
@@ -298,36 +301,36 @@ class RecieverCommands(commands.Cog):
         except JSONDecodeError:
             callbacks = {}
         
-        if streamer not in callbacks.keys():
-            callbacks[streamer] = {"channel_id": streamer_info["id"], "secret": await random_string_generator(21), "alert_roles": {}}
-            sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
-            sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
-            callbacks[streamer]["online_id"] = sub1["data"][0]["id"]
-            callbacks[streamer]["offline_id"] = sub2["data"][0]["id"]
-        callbacks[streamer]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
+        if streamer.username not in callbacks.keys():
+            callbacks[streamer.username] = {"channel_id": str(streamer.id), "secret": await random_string_generator(21), "alert_roles": {}}
+            sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
+            sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
+            callbacks[streamer.username]["online_id"] = sub1.id
+            callbacks[streamer.username]["offline_id"] = sub2.id
+        callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
         if role == None:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif role == ctx.guild.default_role:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
         if alert_mode == 2:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
 
         async with aiofiles.open("config/callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
         #Run catchup on streamer immediately
-        stream_status = self.bot.api.get_stream(user_login=streamer)
+        stream_status = await self.bot.api.get_stream(streamer.username)
         if stream_status is None:
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
-            await self.bot.streamer_offline(streamer)
+            await self.bot.streamer_offline(streamer.username)
         else:
-            await self.bot.streamer_online(streamer, stream_status)
+            await self.bot.streamer_online(streamer.username, stream_status)
 
         embed = Embed(title="Successfully added new streamer", color=self.bot.colour)
-        embed.add_field(name="Streamer", value=streamer, inline=True)
+        embed.add_field(name="Streamer", value=streamer.username, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         embed.add_field(name="Alert Role", value=role, inline=True)
         embed.add_field(name="Alert Mode", value=alert_mode, inline=True)
@@ -430,13 +433,13 @@ class RecieverCommands(commands.Cog):
     @has_guild_permissions(administrator=True)
     async def addtitlechange(self, ctx: SlashInteraction, streamer, notification_channel, role = None):
         # Run checks on all the supplied arguments
-        streamer_info = await self.check_streamer(username=streamer)
-        if not streamer_info:
-            raise BadArgument(f"Could not find twitch user {streamer}!")
+        streamer_search = streamer
+        streamer = await self.check_streamer(username=streamer)
+        if not streamer:
+            raise BadArgument(f"Could not find twitch user {streamer_search}!")
         await self.check_channel_permissions(ctx, channel=notification_channel)
 
         #Checks done
-        self.bot.log.info(role)
         if isinstance(notification_channel, int): notification_channel = self.bot.get_channel(notification_channel)
 
         #Create file structure and subscriptions if necessary
@@ -448,23 +451,23 @@ class RecieverCommands(commands.Cog):
         except JSONDecodeError:
             callbacks = {}
         
-        if streamer not in callbacks.keys():
-            callbacks[streamer] = {"channel_id": streamer_info["id"], "secret": await random_string_generator(21), "alert_roles": {}}
-            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, broadcaster_login=streamer, broadcaster_id=streamer_info["id"], secret=callbacks["streamer"]["secret"])
-            callbacks[streamer]["subscription_id"] = sub["data"][0]["id"]
-        callbacks[streamer]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
+        if streamer.username not in callbacks.keys():
+            callbacks[streamer.username] = {"channel_id": str(streamer.id), "secret": await random_string_generator(21), "alert_roles": {}}
+            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=callbacks[streamer.username]["secret"])
+            callbacks[streamer.username]["subscription_id"] = sub.id
+        callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
         if role == None:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif role == ctx.guild.default_role:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
-            callbacks[streamer]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
 
         async with aiofiles.open("config/title_callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
         embed = Embed(title="Successfully added new title change alert", color=self.bot.colour)
-        embed.add_field(name="Streamer", value=streamer, inline=True)
+        embed.add_field(name="Streamer", value=streamer.username, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         embed.add_field(name="Alert Role", value=role, inline=True)
         await ctx.send(embed=embed)
@@ -524,13 +527,13 @@ class RecieverCommands(commands.Cog):
             await asyncio.sleep(0.2)
             if data.get("online_id", None) is not None:
                 await self.bot.api.delete_subscription(data["online_id"])
-            rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
+            rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
-            callbacks[streamer]["online_id"] = rj1["data"][0]["id"]
+            callbacks[streamer]["online_id"] = rj1.id
             if data.get("offline_id", None) is not None:
                 await self.bot.api.delete_subscription(data["offline_id"])
-            rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM.OFFLINE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
-            callbacks[streamer]["offline_id"] = rj2["data"][0]["id"]
+            rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM.OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
+            callbacks[streamer]["offline_id"] = rj2.id
         async with aiofiles.open(f"config/callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
         self.bot.log.info("Running title resubscribe")
@@ -540,9 +543,9 @@ class RecieverCommands(commands.Cog):
             await asyncio.sleep(0.2)
             if data.get("subscription_id", None) is not None:
                 await self.bot.api.delete_subscription(data["subscription_id"])
-            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, broadcaster_login=streamer, broadcaster_id=data["channel_id"], secret=data["secret"])
+            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
-            callbacks[streamer]["subscription_id"] = sub["data"][0]["id"]
+            callbacks[streamer]["subscription_id"] = sub.id
         async with aiofiles.open(f"config/title_callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
         await ctx.send("Done")

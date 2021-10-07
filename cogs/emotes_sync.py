@@ -33,8 +33,7 @@ class EmoteSync(commands.Cog):
                 if user is None:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue
-                user_id = user["id"]
-                emote_sync[guild_id]["streamer_id"] = user_id
+                emote_sync[guild_id]["streamer_id"] = str(user.id)
             else:
                 user_id = data.get("streamer_id")
             self.bot.log.info(f"Syncing streamer {data['streamer']}")

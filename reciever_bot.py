@@ -65,12 +65,12 @@ class TwitchCallBackBot(commands.Bot):
         except JSONDecodeError:
             return
         streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()])
-        online_streams = [stream["user_id"] for stream in streams]
+        online_streams = [stream.user.id for stream in streams]
         for streamer, data in callbacks.items(): #Iterate through all callbacks and run
-            if data["channel_id"] not in online_streams:
-                await self.streamer_offline(streamer)
+            if int(data["channel_id"]) in online_streams:
+                await self.streamer_online(streamer, [x for x in streams if x.user.id == int(data["channel_id"])][0])
             else:
-                await self.streamer_online(streamer, [x for x in streams if x["user_id"] == data["channel_id"]][0])
+                await self.streamer_offline(streamer)
 
     async def title_change(self, streamer, stream_info):
         try:
@@ -219,7 +219,7 @@ class TwitchCallBackBot(commands.Bot):
             if "format" in callback_info[streamer].keys():
                 format_ = callback_info[streamer]["format"].format(**stream_info).replace("\\n", "\n")
             else:
-                format_ = "{user_name} is live! Playing {game_name}!\nhttps://twitch.tv/{user_name}".format(**stream_info)
+                format_ = f"{stream_info.user.display_name} is live! Playing {stream_info.game}!\nhttps://twitch.tv/{stream_info.user.name}"
             if type(callback_info[streamer]["webhook"]) == list:
                 for webhook in callback_info[streamer]["webhook"]:
                     if discord.__version__ == "2.0.0a":
@@ -240,12 +240,11 @@ class TwitchCallBackBot(commands.Bot):
                 except NotFound:
                     pass
         #Send live alert message
-        stream_start_time = datetime.strptime(stream_info["started_at"], "%Y-%m-%dT%H:%M:%S%z").replace(tzinfo=None) + datetime.now(tzlocal()).utcoffset() #Add timedelta for timezone offset
         embed = Embed(
-            title=stream_info["title"], url=f"https://twitch.tv/{stream_info['user_login']}",
-            description=f"Playing {stream_info['game_name']} for {stream_info['viewer_count']} viewers\n[Watch Stream](https://twitch.tv/{stream_info['user_login']})",
-            colour=8465372, timestamp=stream_start_time)
-        embed.set_author(name=f"{stream_info['user_name']} is now live on Twitch!", url=f"https://twitch.tv/{stream_info['user_login']}")
+            title=stream_info.title, url=f"https://twitch.tv/{stream_info.user.name}",
+            description=f"Playing {stream_info.game} for {stream_info.view_count} viewers\n[Watch Stream](https://twitch.tv/{stream_info.user.name})",
+            colour=8465372, timestamp=stream_info.started_at)
+        embed.set_author(name=f"{stream_info.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream_info.user.name}")
         embed.set_footer(text="Mew")
         SelfOverride = PermissionOverwrite()
         SelfOverride.view_channel = True
@@ -274,7 +273,7 @@ class TwitchCallBackBot(commands.Bot):
                     alert_channel = self.get_channel(alert_channel_id)
                     if alert_channel is not None:
                         try:
-                            live_alert = await alert_channel.send(f"{stream_info['user_name']} is live on Twitch!{role_mention}", embed=embed)
+                            live_alert = await alert_channel.send(f"{stream_info.user.display_name} is live on Twitch!{role_mention}", embed=embed)
                             live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
                         except Forbidden:
                             pass
@@ -290,7 +289,7 @@ class TwitchCallBackBot(commands.Bot):
                         channel = await guild.create_text_channel(f"🔴{streamer}", overwrites=NewChannelOverrides, position=0)
                         if channel is not None:
                             try:
-                                await channel.send(f"{stream_info['user_name']} is live! https://twitch.tv/{stream_info['user_login']}")
+                                await channel.send(f"{stream_info.user.display_name} is live! https://twitch.tv/{stream_info.user.name}")
                                 live_channels.append(channel.id)
                             except Forbidden:
                                 self.log.warning(f"Forbidden error updating {streamer} in guild {guild.name}")

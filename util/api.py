@@ -2,6 +2,10 @@ import aiofiles
 import json
 from aiohttp import ClientSession
 from exceptions import *
+from util.subscription import Subscription
+from util.user import User, PartialUser
+from util.stream import Stream
+from typing import Union, List
 
 class http:
     def __init__(self, bot, auth_file):
@@ -54,25 +58,30 @@ class http:
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
-    async def get_users(self, user_ids=[], user_logins=[]):
+    async def get_users(self, users=[], user_ids=[], user_logins=[]) -> List[User]:
         queries = []
+        queries += [f"id={user.id}" for user in users]
         queries += [f"id={id}" for id in user_ids]
         queries += [f"login={login}" for login in user_logins]
-        data = []
+        users = []
         for chunk in self.chunks(queries, 100):
             join = '&'.join(chunk)
             r = await self._request(f"{self.base}/users?{join}")
             if r.status != 200:
                 raise HTTPException
-            data += (await r.json())["data"]
+            json_data = (await r.json())["data"]
+            for user_json in json_data:
+                users += User(**user_json)
             
-        return data
+        return users
 
-    async def get_user(self, user_id=None, user_login=None):
-        if user_id is not None:
+    async def get_user(self, user: PartialUser = None, user_id=None, user_login=None) -> User:
+        if user is not None:
+            r = await self._request(f"{self.base}/users?id={user.id}")
+        elif user_id is not None:
             r = await self._request(f"{self.base}/users?id={user_id}")
         elif user_login is not None:
-            r = await self._request(f"{self.base}/users?login={user_id}")
+            r = await self._request(f"{self.base}/users?login={user_login}")
         else:
             raise BadRequest
         if r.status != 200:
@@ -80,13 +89,14 @@ class http:
         j = await r.json()
         if j["data"] == []:
             return None
-        return j["data"][0]
+        json_data = j["data"][0]
+        return User(**json_data)
 
-    async def get_streams(self, user_ids=[], user_logins=[]):
+    async def get_streams(self, user_ids=[], user_logins=[]) -> List[Stream]:
         queries = []
         queries += [f"user_id={id}" for id in user_ids]
         queries += [f"user_login={login}" for login in user_logins]
-        data = []
+        streams = []
         if queries == []:
             raise BadRequest
         for chunk in self.chunks(queries, 20):
@@ -94,18 +104,25 @@ class http:
             r = await self._request(f"{self.base}/streams?{join}")
             if r.status != 200:
                 raise HTTPException
-            data += (await r.json())["data"]
+            j = await r.json()
+            for stream in j["data"]:
+                streams.append(Stream(**stream))
             
-        return data
+        return streams
 
-    async def get_stream(self, user_login):
+    async def get_stream(self, user: Union[PartialUser, User, str]) -> Union[Stream, None]:
+        if type(user) in [PartialUser, User]:
+            user_login = user.username
+        else:
+            user_login = user
         r = await self._request(f"{self.base}/streams?user_login={user_login}")
         if r.status != 200:
             raise HTTPException
         j = await r.json()
         if j["data"] == []:
             return None
-        return j["data"][0]
+        json_data = j["data"][0]
+        return Stream(**json_data)
 
     async def get_subscription(self, id):
         r = await self._request(f"{self.base}/eventsub/subscriptions")
@@ -115,25 +132,26 @@ class http:
                 return data
         return None
 
-    async def create_subscription(self, subscription_type: str, broadcaster_login, broadcaster_id, secret):
+    async def create_subscription(self, subscription_type: str, streamer, secret, _type="callback") -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
                 json={
-                    "type": subscription_type,
+                    "type": subscription_type.value,
                     "version": "1",
                     "condition": {
-                        "broadcaster_user_id": broadcaster_id
+                        "broadcaster_user_id": str(streamer.id)
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"{self.callback_url}/callback/{broadcaster_login.lower()}",
+                        "callback": f"{self.callback_url}/{_type}/{streamer.username.lower()}",
                         "secret": secret
                     }
                 }, method="post")
 
         if response.status not in [202, 409]:
-            raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status_code}")
+            raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
         j = await response.json()
-        return j["data"][0]
+        json_data = j["data"][0]
+        return Subscription(**json_data)
 
     async def delete_subscription(self, subscription_id):
         return await self._request(f"{self.base}/eventsub/subscriptions?id={subscription_id}", method="delete")

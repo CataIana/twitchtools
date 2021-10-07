@@ -118,7 +118,8 @@ class RecieverWebServer():
         return web.Response(status=404)
 
     async def title_notification(self, channel, data):
-        if await self.bot.api.get_stream(user_login=channel) == []:
+        stream = await self.bot.api.get_stream(channel)
+        if stream == None:
             live = False
         else:
             live = True
@@ -134,7 +135,7 @@ class RecieverWebServer():
         live = True if data["subscription"]["type"] == "stream.online" else False
 
         if live:
-            notif_info = await self.bot.api.get_stream(user_login=channel)
+            notif_info = await self.bot.api.get_stream(channel)
             if notif_info["game_name"] == "":
                 notif_info["game_name"] = "<no game>"
             await self.bot.streamer_online(channel, notif_info)
