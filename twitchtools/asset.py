@@ -5,8 +5,8 @@ class Asset:
     def __init__(self, avatar, size=None):
         self.BASE = "https://static-cdn.jtvnw.net/"
         self._url = avatar
-        self.size = size or tuple(findall(r"(image|(live_user.*))-(.*)(\.png|\.jpeg|\.jpg)", self._url)[0][-2].split("x"))
-        self.url = self._url.replace(f"{self.size[0]}x{self.size[1]}", "{width}x{height}")  
+        self.size: str = size or tuple(findall(r"(image|(live_user.*))-(.*)(\.png|\.jpeg|\.jpg)", self._url)[0][-2].split("x"))
+        self.url: str = self._url.replace(f"{self.size[0]}x{self.size[1]}", "{width}x{height}")  
 
     def __str__(self) -> str:
         return self._url

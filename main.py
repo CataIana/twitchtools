@@ -2,10 +2,9 @@ from discord import Intents, Colour, Embed, PermissionOverwrite, NotFound, Webho
 import discord
 from discord.ext import commands
 from cogs.webserver import RecieverWebServer
-from util.api import http
+from twitchtools import http
 from aiohttp import ClientSession
 from datetime import datetime
-from dateutil.tz import tzlocal
 from json.decoder import JSONDecodeError
 from time import time
 import aiofiles
@@ -20,7 +19,7 @@ class TwitchCallBackBot(commands.Bot):
         intents.guilds = True
         super().__init__(command_prefix=commands.when_mentioned_or("t!"), intents=intents, activity=Activity(type=ActivityType.listening, name="stream status"))
 
-        self.log = logging.getLogger("TwitchTools")
+        self.log: logging.Logger = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
 
         shandler = logging.StreamHandler(sys.stdout)
@@ -28,9 +27,9 @@ class TwitchCallBackBot(commands.Bot):
         shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 
-        self.slash = InteractionClient(self)
-        self.api = http(self, auth_file=f"config/auth.json")
-        self.web_server = RecieverWebServer(self)
+        self.slash: InteractionClient = InteractionClient(self)
+        self.api: http = http(self, auth_file=f"config/auth.json")
+        self.web_server: RecieverWebServer = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
 
         self.load_extension(f"cogs.reciever_bot_cogs")
@@ -49,7 +48,7 @@ class TwitchCallBackBot(commands.Bot):
 
     @commands.Cog.listener()
     async def on_connect(self):
-        self.aSession = ClientSession() #Make the aiohttp session asap
+        self.aSession: ClientSession = ClientSession() #Make the aiohttp session asap
 
     @commands.Cog.listener()
     async def on_ready(self):

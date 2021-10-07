@@ -17,10 +17,9 @@ from os import getpid
 import sys
 import psutil
 from enum import Enum
-from util.enums import SubscriptionType
-from exceptions import TwitchToolsException
-from util.user import User, PartialUser
-from util.stream import Stream
+from main import TwitchCallBackBot
+from twitchtools import SubscriptionType, User, PartialUser, Stream
+
 
 class TimezoneOptions(Enum):
     short_date = "d" #07/10/2021
@@ -68,7 +67,7 @@ class pretty_time:
 
 class RecieverCommands(commands.Cog):
     def __init__(self, bot):
-        self.bot: TwitchToolsException = bot
+        self.bot: TwitchCallBackBot = bot
         super().__init__()
         self.bot.help_command = None
         self.backup_checks.start()
@@ -84,17 +83,17 @@ class RecieverCommands(commands.Cog):
         self.bot.log.info("Finished streamer catchup")
 
     @commands.Cog.listener()
-    async def on_slash_command(self, ctx):
+    async def on_slash_command(self, ctx: SlashInteraction):
         self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
 
     @slash_command(description="Responds with the bots latency to discords servers")
-    async def ping(self, ctx):
+    async def ping(self, ctx: SlashInteraction):
         gateway = int(self.bot.latency*1000)
         await ctx.send(f"Pong! `{gateway}ms` Gateway") #Message cannot be ephemeral for ping updates to show
 
     @slash_command(description="Owner Only: Reload the bot cogs and listeners")
     @is_owner()
-    async def reload(self, ctx):
+    async def reload(self, ctx: SlashInteraction):
         cog_count = 0
         for ext_name in dict(self.bot.extensions).keys():
             cog_count += 1
@@ -103,14 +102,14 @@ class RecieverCommands(commands.Cog):
     
     @slash_command(description="Owner Only: Run streamer catchup manually")
     @is_owner()
-    async def catchup(self, ctx):
+    async def catchup(self, ctx: SlashInteraction):
         self.bot.log.info("Manually Running streamer catchup...")
         await self.bot.catchup_streamers()
         self.bot.log.info("Finished streamer catchup")
         await ctx.send("Finished catchup!", ephemeral=True)
 
     @slash_command(description="Get various bot information such as memory usage and version")
-    async def botstatus(self, ctx):
+    async def botstatus(self, ctx: SlashInteraction):
         p = pretty_time(self.bot._uptime)
         embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
         if self.bot.owner_id is None:
@@ -138,7 +137,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @slash_command(description="Get how long the bot has been running")
-    async def uptime(self, ctx):
+    async def uptime(self, ctx: SlashInteraction):
         epoch = time() - self.bot._uptime
         conv = {
             "days": str(epoch // 86400).split('.')[0],
@@ -154,7 +153,7 @@ class RecieverCommands(commands.Cog):
             text=f"ID: {ctx.guild.id} | Bot started at {conv['full']}")
         await ctx.send(embed=embed)
 
-    async def aeval(self, ctx, code):
+    async def aeval(self, ctx: SlashInteraction, code):
         code_split = ""
         code_length = len(code.split("\\n"))
         for count, line in enumerate(code.split("\\n"), 1):
@@ -248,7 +247,7 @@ class RecieverCommands(commands.Cog):
             return False
         return user
 
-    async def check_channel_permissions(self, ctx, channel):
+    async def check_channel_permissions(self, ctx: SlashInteraction, channel):
         if isinstance(channel, int): channel = self.bot.get_channel(channel)
         else: channel = self.bot.get_channel(channel.id)
         if not isinstance(channel, TextChannel):
@@ -340,7 +339,7 @@ class RecieverCommands(commands.Cog):
 
     @slash_command(description="List all the active streamer alerts setup in this server")
     @has_guild_permissions(administrator=True)
-    async def liststreamers(self, ctx):
+    async def liststreamers(self, ctx: SlashInteraction):
         try:
             async with aiofiles.open("config/callbacks.json") as f:
                 callback_info = json.loads(await f.read())
@@ -388,7 +387,7 @@ class RecieverCommands(commands.Cog):
 
     @slash_command(description="List all the active title change alerts setup in this server")
     @has_guild_permissions(administrator=True)
-    async def listtitlechanges(self, ctx):
+    async def listtitlechanges(self, ctx: SlashInteraction):
         async with aiofiles.open("config/title_callbacks.json") as f:
             callback_info = json.loads(await f.read())
         uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
@@ -474,12 +473,12 @@ class RecieverCommands(commands.Cog):
 
     @slash_command(description="Remove a live notification alert", options=[Option("streamer", "The name of the streamer to be removed", type=OptionType.STRING, required=True)])
     @has_guild_permissions(administrator=True)
-    async def delstreamer(self, ctx, streamer: str):
+    async def delstreamer(self, ctx: SlashInteraction, streamer: str):
         await self.callback_deletion(ctx, streamer, config_file="callbacks.json", _type="status")
 
     @slash_command(description="Remove a title change alert", options=[Option("streamer", "The name of the streamer to be removed", type=OptionType.STRING, required=True)])
     @has_guild_permissions(administrator=True)
-    async def deltitlechange(self, ctx, streamer: str):
+    async def deltitlechange(self, ctx: SlashInteraction, streamer: str):
         await self.callback_deletion(ctx, streamer, config_file="title_callbacks.json", _type="title")
 
     async def callback_deletion(self, ctx, streamer, config_file, _type="status"):
@@ -519,7 +518,7 @@ class RecieverCommands(commands.Cog):
 
     @slash_command()
     @is_owner()
-    async def resubscribe(self, ctx):
+    async def resubscribe(self, ctx: SlashInteraction):
         self.bot.log.info("Running live alert resubscribe")
         async with aiofiles.open("config/callbacks.json") as f:
             callbacks = json.loads(await f.read())

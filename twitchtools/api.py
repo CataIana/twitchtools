@@ -2,14 +2,13 @@ import aiofiles
 import json
 from aiohttp import ClientSession
 from exceptions import *
-from util.subscription import Subscription
-from util.user import User, PartialUser
-from util.stream import Stream
+from twitchtools import Subscription, User, PartialUser, Stream
+from main import TwitchCallBackBot
 from typing import Union, List
 
 class http:
     def __init__(self, bot, auth_file):
-        self.bot = bot
+        self.bot: TwitchCallBackBot = bot
         self.base = "https://api.twitch.tv/helix"
         self.oauth2_base = "https://id.twitch.tv/oauth2"
         self.storage = auth_file
@@ -30,7 +29,7 @@ class http:
         self.bot.add_listener(self._make_session, 'on_connect')
 
     async def _make_session(self):
-        self.session = ClientSession()
+        self.session: ClientSession = ClientSession()
 
     async def _request(self, url, method="get", **kwargs):
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)

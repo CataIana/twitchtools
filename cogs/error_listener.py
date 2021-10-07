@@ -2,7 +2,7 @@ from discord.errors import Forbidden
 from discord.ext import commands
 import dislash
 from traceback import format_exc, format_exception
-from exceptions import SubscriptionError
+from twitchtools.exceptions import SubscriptionError
 
 class ErrorListener(commands.Cog):
     def __init__(self, bot):
@@ -16,7 +16,7 @@ class ErrorListener(commands.Cog):
         await channel.send(f"```python\n{format_exc()[:1982]}\n```")
 
     @commands.Cog.listener()
-    async def on_slash_command_error(self, ctx, exception):
+    async def on_slash_command_error(self, ctx: dislash.SlashInteraction, exception):
         if isinstance(exception, (dislash.MissingPermissions, dislash.NotOwner, dislash.NotGuildOwner, dislash.MissingRole, dislash.InteractionCheckFailure, dislash.BadArgument, SubscriptionError)):
             return await ctx.send(content=f"<:red_tick:809191812337369118> {exception}")
         if isinstance(exception, Forbidden):

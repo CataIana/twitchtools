@@ -4,10 +4,11 @@ import json
 import hmac
 import hashlib
 import aiofiles
+from main import TwitchCallBackBot
 
 class RecieverWebServer():
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchCallBackBot = bot
         self.port = 18271
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
@@ -136,8 +137,8 @@ class RecieverWebServer():
 
         if live:
             notif_info = await self.bot.api.get_stream(channel)
-            if notif_info["game_name"] == "":
-                notif_info["game_name"] = "<no game>"
+            if notif_info.game_name == "":
+                notif_info.game_name = "<no game>"
             await self.bot.streamer_online(channel, notif_info)
         else:
             await self.bot.streamer_offline(channel)
