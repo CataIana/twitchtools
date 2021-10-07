@@ -137,8 +137,6 @@ class RecieverWebServer():
 
         if live:
             notif_info = await self.bot.api.get_stream(channel)
-            if notif_info.game_name == "":
-                notif_info.game_name = "<no game>"
             await self.bot.streamer_online(channel, notif_info)
         else:
             await self.bot.streamer_offline(channel)

@@ -13,11 +13,11 @@ class Stream:
         self.id: int = id
         self.user: PartialUser = PartialUser(user_id, user_login, user_name)
         self.game_id: int = int(game_id)
-        self.game: str = game_name
-        self.game_name: str = game_name
+        self.game: str = "<no game>" if game_name == "" else game_name
+        self.game_name: str = "<no game>" if game_name == "" else game_name
         self.type: Live = Live(type)
         self.stream_title: str = title
-        self.title: str = title
+        self.title: str = "<no title>" if title == "" else title
         self.viewer_count: int = int(viewer_count)
         self.view_count: int = int(viewer_count)
         self.views: int = int(viewer_count)
