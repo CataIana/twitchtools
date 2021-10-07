@@ -79,7 +79,7 @@ class http:
             
         return users
 
-    async def get_user(self, user: PartialUser = None, user_id=None, user_login=None) -> User:
+    async def get_user(self, user: PartialUser = None, user_id=None, user_login=None) -> Union[User, None]:
         if user is not None:
             r = await self._request(f"{self.base}/users?id={user.id}")
         elif user_id is not None:

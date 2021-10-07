@@ -11,7 +11,7 @@ Am currently in the process of making classes and shit for the bot.
 * Rename `config/exampleauth.json` to `config/auth.json` and fill in the required fields. You will need a twitch application, and a discord bot token
 * Install the required dependencies `sudo pipe install --upgrade -r requirements.txt` The requirements file downloads the beta version of discord.py, but should also work just fine with the most recent full release
 * The webserver runs on port `18271`, so ensure your reverse proxy forwards your callback to that port. You can change this if necessary in `webserver.py`
-* Finally, run the bot with `python3 reciever_bot.py` and you should be good to go
+* Finally, run the bot with `python3 main.py` and you should be good to go
 
 Emote sync doesn't have an interface yet since I haven't fully finished it. If you want to try run it, create `emote_sync.json` in the config folder. The layout per guild looks like ```
 {

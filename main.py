@@ -36,7 +36,7 @@ class TwitchCallBackBot(commands.Bot):
         self.load_extension(f"cogs.reciever_bot_cogs")
         self.load_extension(f"cogs.emotes_sync")
         self.load_extension(f"cogs.error_listener")
-        self.colour = Colour.from_rgb(128, 0, 128)
+        self.colour: Colour = Colour.from_rgb(128, 0, 128)
         with open("config/auth.json") as f:
             self.auth = json.load(f)
         self.token = self.auth["bot_token"]
