@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import aiofiles
+import asyncio
 import json
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
@@ -163,7 +164,18 @@ class http:
             raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
         j = await response.json()
         json_data = j["data"][0]
-        return Subscription(**json_data)
+        subscription = Subscription(**json_data)
+
+        #Wait for subscription confirmation
+        def check(sub_id):
+            return sub_id == subscription.id
+        try:
+            await self.bot.wait_for("subscription_confirmation", check=check, timeout=8)
+        except asyncio.TimeoutError:
+            await self.delete_subscription(subscription.id)
+            raise SubscriptionError("Did not receive subscription confirmation! Please try again later")
+
+        return subscription
 
     async def delete_subscription(self, subscription: Union[Subscription, str]) -> ClientResponse:
         if isinstance(subscription, Subscription):

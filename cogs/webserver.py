@@ -99,8 +99,10 @@ class RecieverWebServer():
         
         if mode == "webhook_callback_verification": #Initial Verification of Subscription
             if callback_type == "titlecallback":
+                self.bot.dispatch("subscription_confirmation", data["subscription"]["id"])
                 self.bot.log.info(f"Title Change Subscription confirmed for {channel}")
             else:
+                self.bot.dispatch("subscription_confirmation", data["subscription"]["id"])
                 self.bot.log.info(f"Subscription confirmed for {channel}")
             challenge = data['challenge']
             return web.Response(status=202, text=challenge)
@@ -143,7 +145,7 @@ class RecieverWebServer():
         live = stream is not None
 
         if live:
-            self.bot.dispatch("streamer_online", streamer, stream)
+            self.bot.dispatch("streamer_online", stream)
         else:
             self.bot.dispatch("streamer_offline", streamer)
 

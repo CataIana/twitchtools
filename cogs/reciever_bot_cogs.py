@@ -1,4 +1,3 @@
-from discord import Embed, TextChannel, NotFound
 from discord.ext import commands, tasks
 from discord.utils import utcnow
 from dislash import slash_command, Option, OptionType, OptionChoice, is_owner, SlashInteraction, BadArgument, BotMissingPermissions
@@ -20,6 +19,7 @@ from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream
+from twitchtools.exceptions import SubscriptionError
 
 
 class TimezoneOptions(Enum):
@@ -112,7 +112,7 @@ class RecieverCommands(commands.Cog):
     @slash_command(description="Get various bot information such as memory usage and version")
     async def botstatus(self, ctx: SlashInteraction):
         p = pretty_time(self.bot._uptime)
-        embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
+        embed = discord.Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
         if self.bot.owner_id is None:
             owner_objs = [str(self.bot.get_user(user)) for user in self.bot.owner_ids]
             owners = ', '.join(owner_objs).rstrip(", ")
@@ -148,7 +148,7 @@ class RecieverCommands(commands.Cog):
             "full": strftime('%Y-%m-%d %I:%M:%S %p %Z', localtime(self.bot._uptime))
         }
         description = f"{conv['days']} {'day' if conv['days'] == '1' else 'days'}, {conv['hours']} {'hour' if conv['hours'] == '1' else 'hours'}, {conv['minutes']} {'minute' if conv['minutes'] == '1' else 'minutes'} and {conv['seconds']} {'second' if conv['seconds'] == '1' else 'seconds'}"
-        embed = Embed(title="Uptime", description=description,
+        embed = discord.Embed(title="Uptime", description=description,
                             color=self.bot.colour, timestamp=datetime.utcnow())
         embed.set_footer(
             text=f"ID: {ctx.guild.id} | Bot started at {conv['full']}")
@@ -251,7 +251,7 @@ class RecieverCommands(commands.Cog):
     async def check_channel_permissions(self, ctx: SlashInteraction, channel):
         if isinstance(channel, int): channel = self.bot.get_channel(channel)
         else: channel = self.bot.get_channel(channel.id)
-        if not isinstance(channel, TextChannel):
+        if not isinstance(channel, discord.TextChannel):
             raise BadArgument(f"Channel {channel.mention} is not a text channel!")
 
         perms = {"view_channel": True, "read_message_history": True, "send_messages": True}
@@ -301,12 +301,11 @@ class RecieverCommands(commands.Cog):
         except JSONDecodeError:
             callbacks = {}
         
+        make_subscriptions = False
         if streamer.username not in callbacks.keys():
+            make_subscriptions = True
             callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
-            sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
-            sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
-            callbacks[streamer.username]["online_id"] = sub1.id
-            callbacks[streamer.username]["offline_id"] = sub2.id
+
         callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
         if role == None:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
@@ -320,6 +319,19 @@ class RecieverCommands(commands.Cog):
         async with aiofiles.open("config/callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
+        if make_subscriptions:
+            try:
+                sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
+                callbacks[streamer.username]["online_id"] = sub1.id
+                sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
+                callbacks[streamer.username]["offline_id"] = sub2.id
+            except SubscriptionError as e:
+                await self.callback_deletion(ctx, streamer.username, config_file="title_callbacks.json", _type="title")
+                raise SubscriptionError(str(e))
+
+        async with aiofiles.open("config/callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+
         #Run catchup on streamer immediately
         stream_status = await self.bot.api.get_stream(streamer.username)
         if stream_status is None:
@@ -329,7 +341,7 @@ class RecieverCommands(commands.Cog):
         else:
             self.bot.dispatch("streamer_online", streamer, stream_status)
 
-        embed = Embed(title="Successfully added new streamer", color=self.bot.colour)
+        embed = discord.Embed(title="Successfully added new streamer", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         embed.add_field(name="Alert Role", value=role, inline=True)
@@ -451,10 +463,11 @@ class RecieverCommands(commands.Cog):
         except JSONDecodeError:
             callbacks = {}
         
+        make_subscriptions = False
         if streamer.username not in callbacks.keys():
+            make_subscriptions = True
             callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
-            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=callbacks[streamer.username]["secret"])
-            callbacks[streamer.username]["subscription_id"] = sub.id
+            
         callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
         if role == None:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
@@ -466,7 +479,18 @@ class RecieverCommands(commands.Cog):
         async with aiofiles.open("config/title_callbacks.json", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
-        embed = Embed(title="Successfully added new title change alert", color=self.bot.colour)
+        if make_subscriptions:
+            try:
+                sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=callbacks[streamer.username]["secret"])
+            except SubscriptionError as e:
+                await self.callback_deletion(ctx, streamer.username, config_file="title_callbacks.json", _type="title")
+                raise SubscriptionError(str(e))
+            callbacks[streamer.username]["subscription_id"] = sub.id
+
+        async with aiofiles.open("config/title_callbacks.json", "w") as f:
+            await f.write(json.dumps(callbacks, indent=4))
+
+        embed = discord.Embed(title="Successfully added new title change alert", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         embed.add_field(name="Alert Role", value=role, inline=True)
@@ -476,11 +500,15 @@ class RecieverCommands(commands.Cog):
     @has_guild_permissions(administrator=True)
     async def delstreamer(self, ctx: SlashInteraction, streamer: str):
         await self.callback_deletion(ctx, streamer, config_file="callbacks.json", _type="status")
+        embed = discord.Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
+        await ctx.send(embed=embed)
 
     @slash_command(description="Remove a title change alert", options=[Option("streamer", "The name of the streamer to be removed", type=OptionType.STRING, required=True)])
     @has_guild_permissions(administrator=True)
     async def deltitlechange(self, ctx: SlashInteraction, streamer: str):
         await self.callback_deletion(ctx, streamer, config_file="title_callbacks.json", _type="title")
+        embed = discord.Embed(title="Streamer Removed", description=f"Deleted title change alert for {streamer}", colour=self.bot.colour)
+        await ctx.send(embed=embed)
 
     async def callback_deletion(self, ctx, streamer, config_file, _type="status"):
         try:
@@ -493,7 +521,7 @@ class RecieverCommands(commands.Cog):
         try:
             del callbacks[streamer]["alert_roles"][str(ctx.guild.id)]
         except KeyError:
-            embed = Embed(title="Error", description="<:red_tick:809191812337369118> Streamer not found for server", colour=self.bot.colour)
+            embed = discord.Embed(title="Error", description="<:red_tick:809191812337369118> Streamer not found for server", colour=self.bot.colour)
             await ctx.send(embed=embed)
             return
         if callbacks[streamer]["alert_roles"] == {}:
@@ -509,13 +537,6 @@ class RecieverCommands(commands.Cog):
             del callbacks[streamer]
         async with aiofiles.open(f"config/{config_file}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
-        if _type == "title":
-            embed = Embed(title="Streamer Removed", description=f"Deleted title change alert for {streamer}", colour=self.bot.colour)
-        elif _type == "status":
-            embed = Embed(title="Streamer Removed", description=f"Deleted alert for {streamer}", colour=self.bot.colour)
-        else:
-            return
-        return await ctx.send(embed=embed)
 
     @slash_command()
     @is_owner()
