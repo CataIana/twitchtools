@@ -1,8 +1,6 @@
 # Twitch Tools
-A slash commands based discord bot that has eventsub based subscriptions for fast live alerts, as well as alerts for title changes when a streamer is offline.
+A slash commands based discord bot that uses eventsub based subscriptions for fast live alerts, as well as alerts for title changes when a streamer is offline.
 Also has a bad implementation of syncing bttv/ffz emotes to discord
-
-Am currently in the process of making classes and shit for the bot. 
 
 # Setup
 ## This assumes you have a https supported webserver to recieve eventsub callbacks. I recommend proxying with nginx if you do not currently do so.
