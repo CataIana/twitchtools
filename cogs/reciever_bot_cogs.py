@@ -16,6 +16,7 @@ import aiofiles
 from os import getpid
 import sys
 import psutil
+from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream
@@ -165,23 +166,20 @@ class RecieverCommands(commands.Cog):
         exec(combined)
         return await locals()['__ex'](self, ctx)
 
-    # @slash_command(description="Evalute a string as a command")
-    # async def eval(self, ctx: SlashInteraction,
-    #     command: str = OptionParam(description="The string to be evaluated"),
-    #     respond: bool = OptionParam(True, description="Respond with attributes and functions?"),
-    # ):
     @slash_command(description="Evalute a string as a command", options=[Option("command", "The string to be evaled", type=OptionType.STRING, required=True), Option("respond", "Should the bot respond with the return values attributes and functions", type=OptionType.BOOLEAN, required=False)])
     @is_owner()
     async def eval(self, ctx: SlashInteraction, command, respond=True):
         code_string = "```nim\n{}```"
         if command.startswith("`") and command.endswith("`"):
             command = command[1:][:-1]
+        start = time()
         try:
             resp = await self.aeval(ctx, command)
         except Exception as ex:
-            await ctx.send(content=f"Exception Occurred: `{ex}`")
+            await ctx.send(content=f"Exception Occurred: `{type(ex).__name__}: {ex}`")
         else:
-            if not ctx.invoked_with == "evalr" and respond:
+            finish = time()
+            if not ctx.invoked_with == "evalr":
                 if type(resp) == str:
                     return await ctx.send(code_string.format(resp))
 
@@ -194,8 +192,9 @@ class RecieverCommands(commands.Cog):
                         attr = getattr(resp, attr_name)
                     except AttributeError:
                         pass
-                    if attr_name.startswith("_"):
-                        continue #Most methods/attributes starting with __ or _ are generally unwanted, skip them
+                    if not ctx.invoked_with == "evala":
+                        if attr_name.startswith("_"):
+                            continue #Most methods/attributes starting with __ or _ are generally unwanted, skip them
                     if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
                         attributes[str(attr_name)] = f"{attr} [{type(attr).__name__}]"
                     else:
@@ -203,8 +202,6 @@ class RecieverCommands(commands.Cog):
                             amethods.append(attr_name)
                         else:
                             methods.append(attr_name)
-                if attributes == {}:
-                    attributes["str"] = str(resp)
 
                 #Form the long ass string of everything
                 return_string = []
@@ -212,16 +209,20 @@ class RecieverCommands(commands.Cog):
                     stred = str(resp)
                 else:
                     stred = '\n'.join([str(r) for r in resp])
-                return_string += [f"Type: {type(resp).__name__}", f"Str: {stred}", '', "Attributes:"] #List return type, it's str value
-                return_string += [f"{x}:    {y}" for x, y in attributes.items()]
+                return_string += [f"Type: {type(resp).__name__}", f"String: {shorten(stred, width=1000)}"] #List return type, it's str value
+                if attributes != {}:
+                    return_string += ["", "Attributes: "]
+                    return_string += [f"{x}:    {shorten(y, width=(106-len(x)))}" for x, y in attributes.items()]
 
                 if methods != []:
                     return_string.append("\nMethods:")
                     return_string.append(', '.join([method for method in methods]).rstrip(", "))
 
                 if amethods != []:
-                    return_string.append("\n\nAsync/Awaitable Methods:")
+                    return_string.append("\nAsync/Awaitable Methods:")
                     return_string.append(', '.join([method for method in amethods]).rstrip(", "))
+
+                return_string.append(f"\nTook {((finish-start)*1000):2f}ms to process eval")
 
                 d_str = ""
                 for x in return_string:
@@ -238,7 +239,7 @@ class RecieverCommands(commands.Cog):
                 if d_str != "":
                     try:
                         await ctx.send(code_string.format(d_str))
-                    except NotFound:
+                    except discord.errors.NotFound:
                         pass
 
     async def check_streamer(self, username):
