@@ -123,12 +123,13 @@ class RecieverWebServer():
 
     async def title_notification(self, channel, data):
         stream = await self.bot.api.get_stream(channel)
+        event = self.bot.api.get_event(data)
         if stream == None:
             live = False
         else:
             live = True
         if not live:
-            await self.bot.title_change(channel, data)
+            self.bot.dispatch("title_change", event)
         else:
             self.bot.log.info(f"{channel} is live, ignoring title change")
 
@@ -136,12 +137,14 @@ class RecieverWebServer():
 
     async def notification(self, channel, data):
         channel = data.get("broadcaster_user_login", channel)
-        live = True if data["subscription"]["type"] == "stream.online" else False
+        streamer = await self.bot.api.get_user(user_login=channel)
+        stream = await self.bot.api.get_stream(streamer)
+
+        live = stream is not None
 
         if live:
-            notif_info = await self.bot.api.get_stream(channel)
-            await self.bot.streamer_online(channel, notif_info)
+            self.bot.dispatch("streamer_online", streamer, stream)
         else:
-            await self.bot.streamer_offline(channel)
+            self.bot.dispatch("streamer_offline", streamer)
 
         return web.Response(status=202)

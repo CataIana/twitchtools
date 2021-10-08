@@ -301,7 +301,7 @@ class RecieverCommands(commands.Cog):
             callbacks = {}
         
         if streamer.username not in callbacks.keys():
-            callbacks[streamer.username] = {"channel_id": str(streamer.id), "secret": await random_string_generator(21), "alert_roles": {}}
+            callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
             sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
             sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
             callbacks[streamer.username]["online_id"] = sub1.id
@@ -324,9 +324,9 @@ class RecieverCommands(commands.Cog):
         if stream_status is None:
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
-            await self.bot.streamer_offline(streamer.username)
+            self.bot.dispatch("streamer_offline", streamer)
         else:
-            await self.bot.streamer_online(streamer.username, stream_status)
+            self.bot.dispatch("streamer_online", streamer, stream_status)
 
         embed = Embed(title="Successfully added new streamer", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
@@ -451,7 +451,7 @@ class RecieverCommands(commands.Cog):
             callbacks = {}
         
         if streamer.username not in callbacks.keys():
-            callbacks[streamer.username] = {"channel_id": str(streamer.id), "secret": await random_string_generator(21), "alert_roles": {}}
+            callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=callbacks[streamer.username]["secret"])
             callbacks[streamer.username]["subscription_id"] = sub.id
         callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}

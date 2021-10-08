@@ -3,8 +3,10 @@ from typing import TYPE_CHECKING
 import aiofiles
 import json
 from aiohttp import ClientSession
+from aiohttp.client_reqrep import ClientResponse
 from .exceptions import *
-from .subscription import Subscription
+from .subscription import Subscription, SubscriptionEvent, TitleEvent
+from .enums import SubscriptionType
 from .user import PartialUser, User
 from .stream import Stream
 from typing import Union, List
@@ -26,6 +28,7 @@ class http:
             raise BadAuthorization
         try:
             self.client_id = a["client_id"]
+            self.client_secret = a["client_secret"]
             self.access_token = a["access_token"]
             self.callback_url = a["callback_url"]
         except KeyError:
@@ -128,13 +131,18 @@ class http:
         json_data = j["data"][0]
         return Stream(**json_data)
 
-    async def get_subscription(self, id):
+    async def get_subscription(self, id) -> Union[Subscription, None]:
         r = await self._request(f"{self.base}/eventsub/subscriptions")
         rj = await r.json()
-        for data in rj["data"]:
-            if data["id"] == id:
-                return data
+        for sub in rj["data"]:
+            if sub["id"] == id:
+                return Subscription(**sub)
         return None
+
+    def get_event(self, data) -> SubscriptionEvent:
+        event_type = SubscriptionType(data["subscription"]["type"])
+        if event_type == SubscriptionType.CHANNEL_UPDATE:
+            return TitleEvent(**data)
 
     async def create_subscription(self, subscription_type: str, streamer, secret, _type="callback") -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
@@ -157,5 +165,7 @@ class http:
         json_data = j["data"][0]
         return Subscription(**json_data)
 
-    async def delete_subscription(self, subscription_id):
-        return await self._request(f"{self.base}/eventsub/subscriptions?id={subscription_id}", method="delete")
+    async def delete_subscription(self, subscription: Union[Subscription, str]) -> ClientResponse:
+        if isinstance(subscription, Subscription):
+            subscription = subscription.id
+        return await self._request(f"{self.base}/eventsub/subscriptions?id={subscription}", method="delete")

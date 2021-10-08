@@ -12,6 +12,9 @@ class PartialUser:
         self.name: str = user_login
         self.username: str = user_login
         self.display_name: str = display_name
+
+    def __str__(self) -> str:
+        return self.login
         
     def __repr__(self) -> str:
         return f'<User id={self.id} name={self.name!r}>'

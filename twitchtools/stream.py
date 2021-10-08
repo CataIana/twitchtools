@@ -14,13 +14,13 @@ class Stream:
         self.user: PartialUser = PartialUser(user_id, user_login, user_name)
         self.game_id: int = int(game_id)
         self.game: str = "<no game>" if game_name == "" else game_name
-        self.game_name: str = "<no game>" if game_name == "" else game_name
+        self.game_name: str = self.game
         self.type: Live = Live(type)
-        self.stream_title: str = title
         self.title: str = "<no title>" if title == "" else title
+        self.stream_title: str = self.title
         self.viewer_count: int = int(viewer_count)
-        self.view_count: int = int(viewer_count)
-        self.views: int = int(viewer_count)
+        self.view_count: int = self.viewer_count
+        self.views: int = self.viewer_count
         self.started_at: datetime = parser.parse(started_at)
         try:
             self.language: Languages = Languages[language.upper()]
