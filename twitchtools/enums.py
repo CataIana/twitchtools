@@ -5,7 +5,6 @@ class BroadcasterType(Enum):
     affiliate = "affiliate"
     none = ''
 
-
 class UserType(Enum):
     staff = "staff"
     admin = "admin"
@@ -15,6 +14,9 @@ class UserType(Enum):
 class Live(Enum):
     live = "live"
     none = ""
+
+class SubscriptionMethod(Enum):
+    webhook = "webhook"
 
 class SubscriptionStatus(Enum):
     verification_pending = "webhook_callback_verification_pending"

@@ -1,6 +1,6 @@
 from datetime import datetime
 from dateutil import parser
-from .enums import SubscriptionStatus, SubscriptionType, Languages
+from .enums import SubscriptionStatus, SubscriptionType, Languages, SubscriptionMethod
 from .user import PartialUser
 
 class Subscription:
@@ -11,7 +11,7 @@ class Subscription:
         self.version: int = int(version)
         self.broadcaster_user_id: int = int(condition["broadcaster_user_id"])
         self.created_at: datetime = parser.parse(created_at)
-        self.method: str = transport["method"]
+        self.method: SubscriptionMethod = SubscriptionMethod(transport["method"])
         self.callback: str = transport["callback"]
         self.cost: int = int(cost)
 
