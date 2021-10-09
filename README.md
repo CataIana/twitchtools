@@ -3,7 +3,7 @@ A slash commands based discord bot that uses eventsub based subscriptions for fa
 Also has a bad implementation of syncing bttv/ffz emotes to discord
 
 # Setup
-## This assumes you have a https supported webserver to recieve eventsub callbacks. I recommend proxying with nginx if you do not currently do so.
+## This was built with it being ran behind a reverse proxy (nginx) in mind, I run it behind nginx myself and it is highly recommended to do the same
 
 * Clone the repo `git clone https://github.com/CataIana/twitchtools.git`
 * Rename `config/exampleauth.json` to `config/auth.json` and fill in the required fields. You will need a twitch application, and a discord bot token
