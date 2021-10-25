@@ -1,5 +1,6 @@
 from __future__ import annotations
 import discord
+from dislash import InteractionClient
 from discord.ext import commands
 from discord.utils import MISSING
 from cogs.webserver import RecieverWebServer
@@ -9,7 +10,6 @@ from time import time
 import logging
 import json
 import sys
-from dislash import InteractionClient
 
 from twitchtools.user import PartialUser
 

@@ -63,11 +63,11 @@ class RecieverWebServer():
             if callback_type == "titlecallback":
                 if not getattr(self.bot, "title_callbacks", None):
                     self.bot.title_callbacks = await self.get_title_callbacks()
-                    callbacks = self.bot.title_callbacks
+                callbacks = self.bot.title_callbacks
             else:
                 if not getattr(self.bot, "callbacks", None):
                     self.bot.callbacks = await self.get_callbacks()
-                    callbacks = self.bot.callbacks
+                callbacks = self.bot.callbacks
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
@@ -76,7 +76,7 @@ class RecieverWebServer():
             return
         if channel not in callbacks.keys():
             self.bot.log.info(f"Request for {channel} not found")
-            return web.Response(status=404)
+            return web.Response(status=400)
 
         verified = await self.verify_request(request, callbacks[channel]["secret"])
         if verified == False:
