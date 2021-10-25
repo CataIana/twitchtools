@@ -87,7 +87,10 @@ class RecieverCommands(commands.Cog):
 
     @commands.Cog.listener()
     async def on_slash_command(self, ctx: SlashInteraction):
-        self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
+        if ctx.slash_command is not None:
+            self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
+        else:
+            self.bot.log.info(f"Attemped to run invalid slash command!")
 
     @application_commands.slash_command(description="Responds with the bots latency to discords servers")
     async def ping(self, ctx: SlashInteraction):
@@ -520,18 +523,18 @@ class RecieverCommands(commands.Cog):
         async with aiofiles.open(f"config/{config_file}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
-    @application_commands.slash_command(description="Owner Only: Test if callback is functioning correctly", guild_ids=[749646865531928628])
-    @application_commands.is_owner()
-    async def testcallback(self, ctx: SlashInteraction):
-        #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
-        try:
-            r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
-        except asyncio.TimeoutError:
-            return await ctx.send(f"Callback test failed. Server timed out")
-        if r.status == 400:
-            await ctx.send("Callback Test Successful. Returned expected HTTP status code 400")
-        else:
-            await ctx.send(f"Callback test failed. Expected HTTP status code 400 but got {r.status}")
+    # @application_commands.slash_command(description="Owner Only: Test if callback is functioning correctly")
+    # @application_commands.is_owner()
+    # async def testcallback(self, ctx: SlashInteraction):
+    #     #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
+    #     try:
+    #         r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
+    #     except asyncio.TimeoutError:
+    #         return await ctx.send(f"Callback test failed. Server timed out")
+    #     if r.status == 400:
+    #         await ctx.send("Callback Test Successful. Returned expected HTTP status code 400")
+    #     else:
+    #         await ctx.send(f"Callback test failed. Expected HTTP status code 400 but got {r.status}")
 
 
     @application_commands.slash_command(description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
