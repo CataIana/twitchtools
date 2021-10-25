@@ -49,11 +49,9 @@ class http:
             if reauth.status == 401:
                 raise BadAuthorization
             reauth_data = await reauth.json()
-            async with aiofiles.open("config/auth.json") as f:
-                auth = json.loads(await f.read())
-            auth["access_token"] = reauth_data["access_token"]
+            self.bot.auth["access_token"] = reauth_data["access_token"]
             async with aiofiles.open(self.storage, "w") as f:
-                await f.write(json.dumps(auth, indent=4))
+                await f.write(json.dumps(self.bot.auth, indent=4))
             self.headers["Authorization"] = f"Bearer {reauth_data['access_token']}"
             self.access_token = reauth_data['access_token']
             response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
@@ -66,7 +64,7 @@ class http:
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
-    async def get_users(self, users=[], user_ids=[], user_logins=[]) -> List[User]:
+    async def get_users(self, users: List[PartialUser] = [], user_ids: List[int] = [], user_logins: List[str] = []) -> List[User]:
         queries = []
         queries += [f"id={user.id}" for user in users]
         queries += [f"id={id}" for id in user_ids]
@@ -145,7 +143,7 @@ class http:
         if event_type == SubscriptionType.CHANNEL_UPDATE:
             return TitleEvent(**data)
 
-    async def create_subscription(self, subscription_type: str, streamer, secret, _type="callback") -> Subscription:
+    async def create_subscription(self, subscription_type: SubscriptionType, streamer: Union[User, PartialUser], secret, _type="callback") -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
                 json={
                     "type": subscription_type.value,

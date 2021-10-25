@@ -22,7 +22,7 @@ class Avatar(Asset):
         super().__init__(avatar, size)
 
     @classmethod
-    def within_range(self, size):
+    def within_range(self, size) :
         return True if size in (300, 600) else False
 
     def with_size(self, size):

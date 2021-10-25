@@ -1,12 +1,17 @@
 from json.decoder import JSONDecodeError
 from discord import Forbidden, HTTPException
+from discord.emoji import Emoji
 from discord.ext import commands, tasks
 import json
 import aiofiles
+from twitchtools.user import User
+from typing import TYPE_CHECKING, Union
+if TYPE_CHECKING:
+    from main import TwitchCallBackBot
 
 class EmoteSync(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchCallBackBot = bot
         super().__init__()
         self.sync_loop.start()
 
@@ -29,7 +34,7 @@ class EmoteSync(commands.Cog):
         self.bot.log.info("Starting emote sync...")
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
-                user = self.bot.api.get_user(user_login=data["streamer"])
+                user: User = self.bot.api.get_user(user_login=data["streamer"])
                 if user is None:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue
@@ -98,7 +103,7 @@ class EmoteSync(commands.Cog):
     async def ffz_remove_from_discord(self, emote_sync, guild_id, id):
         guild = self.bot.get_guild(int(guild_id))
         if guild is not None:
-            emote = None
+            emote: Union[Emoji, None] = None
             emote_id = emote_sync[guild_id]["emotes"]["ffz"][id]
             for emoji in guild.emojis:
                 if emoji.id == int(emote_id):
@@ -136,7 +141,7 @@ class EmoteSync(commands.Cog):
     async def bttv_remove_from_discord(self, emote_sync, guild_id, id):
         guild = self.bot.get_guild(int(guild_id))
         if guild is not None:
-            emote = None
+            emote: Union[Emoji, None] = None
             emote_id = emote_sync[guild_id]["emotes"]["bttv"][id]
             for emoji in guild.emojis:
                 if emoji.id == int(emote_id):

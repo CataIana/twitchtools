@@ -3,16 +3,19 @@ from discord.ext import commands
 import dislash
 from traceback import format_exc, format_exception
 from twitchtools.exceptions import SubscriptionError
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import TwitchCallBackBot
 
 class ErrorListener(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchCallBackBot = bot
         super().__init__()
 
     @commands.Cog.listener()
     async def on_error(self, event, *args, **kwargs):
         channel = self.bot.get_guild(749646865531928628).get_channel(763351494685884446)
-        self.log.error(format_exc())
+        self.bot.log.error(format_exc())
         await channel.send(f"```python\n{format_exc()[:1982]}\n```")
 
     @commands.Cog.listener()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import discord
 from discord.ext import commands
+from discord.utils import MISSING
 from cogs.webserver import RecieverWebServer
 from twitchtools.api import http
 from aiohttp import ClientSession
@@ -38,9 +39,15 @@ class TwitchCallBackBot(commands.Bot):
         self.load_extension(f"cogs.streamer_status")
         self.colour: discord.Colour = discord.Colour.from_rgb(128, 0, 128)
         with open("config/auth.json") as f:
-            self.auth = json.load(f)
+            self.auth: dict = json.load(f)
         self.token = self.auth["bot_token"]
         self._uptime = time()
+
+        self.callbacks: dict = MISSING
+        self.title_callbacks: dict = MISSING
+        self.channel_cache: dict = MISSING
+        self.title_cache: dict = MISSING
+        self.notif_cache: dict = MISSING
 
     async def close(self):
         await self.aSession.close()
@@ -57,12 +64,13 @@ class TwitchCallBackBot(commands.Bot):
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        callbacks = await self.get_callbacks() #Get callback dict
-        if not callbacks:
+        if not getattr(self, "callbacks", None):
+            self.callbacks = await self.get_callbacks() #Get callback dict
+        if not self.callbacks:
             return
-        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()]) #Fetch all streamers, returning the currently live ones
+        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in self.callbacks.values()]) #Fetch all streamers, returning the currently live ones
         online_streams = [stream.user.id for stream in streams] #We only need the ID from them
-        for streamer, data in callbacks.items(): #Iterate through all callbacks and update all streamers
+        for streamer, data in self.callbacks.items(): #Iterate through all callbacks and update all streamers
             if data["channel_id"] in online_streams:
                 self.dispatch("streamer_online", [x for x in streams if x.user.id == data["channel_id"]][0])
             else:

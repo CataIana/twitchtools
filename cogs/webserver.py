@@ -2,14 +2,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from json.decoder import JSONDecodeError
 from aiohttp import web
-import json
 import hmac
 import hashlib
-import aiofiles
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
 class RecieverWebServer():
+    from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         self.port = 18271
@@ -23,7 +22,7 @@ class RecieverWebServer():
         self.bot.log.info(f"Webserver running on localhost:{self.port}")
         return self.web_server
 
-    async def _reciever(self, request):
+    async def _reciever(self, request: web.Request):
         await self.bot.wait_until_ready()
         channel = request.match_info["channel"]
         callback_type = request.match_info["callback_type"]
@@ -32,14 +31,9 @@ class RecieverWebServer():
             return await self.post_request(request, callback_type, channel)
         return web.Response(status=404)
 
-    async def verify_request(self, request, secret):
-        try:
-            async with aiofiles.open("cache/notifcache.cache") as f:
-                notifcache = json.loads(await f.read())
-        except FileNotFoundError:
-            notifcache = []
-        except json.decoder.JSONDecodeError:
-            notifcache = []
+    async def verify_request(self, request: web.Request, secret: str):
+        if not getattr(self.bot, "notif_cache", None):
+            self.bot.notif_cache = await self.get_notif_cache()
 
         try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
@@ -48,7 +42,7 @@ class RecieverWebServer():
         except KeyError as e:
             self.bot.log.info(f"Request Denied. Missing Key {e}")
             return False
-        if message_id in notifcache:
+        if message_id in self.bot.notif_cache:
             return None
 
         hmac_message = message_id.encode("utf-8") + timestamp.encode("utf-8") + await request.read()
@@ -58,21 +52,22 @@ class RecieverWebServer():
         self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {signature}")
         if signature != expected_signature:
             return False
-        notifcache.append(message_id)
-        if len(notifcache) > 10: notifcache = notifcache[1:]
-        async with aiofiles.open("cache/notifcache.cache", "w") as f:
-            await f.write(json.dumps(notifcache, indent=4))
+        self.bot.notif_cache.append(message_id)
+        if len(self.bot.notif_cache) > 10: notifcache = self.bot.notif_cache[1:]
+        await self.write_notif_cache(self.bot.notif_cache)
         return True
             
 
-    async def post_request(self, request, callback_type, channel):
+    async def post_request(self, request: web.Request, callback_type: str, channel: str):
         try:
             if callback_type == "titlecallback":
-                async with aiofiles.open("config/title_callbacks.json") as f:
-                    callbacks = json.loads(await f.read())
+                if not getattr(self.bot, "title_callbacks", None):
+                    self.bot.title_callbacks = await self.get_title_callbacks()
+                    callbacks = self.bot.title_callbacks
             else:
-                async with aiofiles.open("config/callbacks.json") as f:
-                    callbacks = json.loads(await f.read())
+                if not getattr(self.bot, "callbacks", None):
+                    self.bot.callbacks = await self.get_callbacks()
+                    callbacks = self.bot.callbacks
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
@@ -120,7 +115,7 @@ class RecieverWebServer():
                 self.bot.log.info(f"Notification for {channel}")
                 return await self.notification(channel, data)
         else:
-            self.bot.loog.info("Unknown mode")
+            self.bot.log.info("Unknown mode")
         return web.Response(status=404)
 
     async def title_notification(self, channel, data):
