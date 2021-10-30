@@ -338,7 +338,7 @@ class RecieverCommands(commands.Cog):
                 await status_channel.edit(name="stream-offline")
             self.bot.dispatch("streamer_offline", streamer)
         else:
-            self.bot.dispatch("streamer_online", streamer, stream_status)
+            self.bot.dispatch("streamer_online", stream_status)
 
         embed = discord.Embed(title="Successfully added new streamer", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
