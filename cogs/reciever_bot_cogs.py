@@ -523,18 +523,18 @@ class RecieverCommands(commands.Cog):
         async with aiofiles.open(f"config/{config_file}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
-    # @application_commands.slash_command(description="Owner Only: Test if callback is functioning correctly")
-    # @application_commands.is_owner()
-    # async def testcallback(self, ctx: SlashInteraction):
-    #     #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
-    #     try:
-    #         r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
-    #     except asyncio.TimeoutError:
-    #         return await ctx.send(f"Callback test failed. Server timed out")
-    #     if r.status == 400:
-    #         await ctx.send("Callback Test Successful. Returned expected HTTP status code 400")
-    #     else:
-    #         await ctx.send(f"Callback test failed. Expected HTTP status code 400 but got {r.status}")
+    @application_commands.slash_command(description="Owner Only: Test if callback is functioning correctly")
+    @application_commands.is_owner()
+    async def testcallback(self, ctx: SlashInteraction):
+        #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
+        try:
+            r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
+        except asyncio.TimeoutError:
+            return await ctx.send(f"Callback test failed. Server timed out")
+        if r.status == 400:
+            await ctx.send("Callback Test Successful. Returned expected HTTP status code 400")
+        else:
+            await ctx.send(f"Callback test failed. Expected HTTP status code 400 but got {r.status}")
 
 
     @application_commands.slash_command(description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
