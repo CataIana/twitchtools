@@ -305,17 +305,17 @@ class RecieverCommands(commands.Cog):
         make_subscriptions = False
         if streamer.username not in self.bot.callbacks.keys():
             make_subscriptions = True
-            self.callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
+            self.bot.callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
 
-        self.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
+        self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
         if role == None:
-            self.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif role == ctx.guild.default_role:
-            self.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
-            self.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = role.id
         if alert_mode == 2:
-            self.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
 
         await self.write_callbacks(self.bot.callbacks)
 
