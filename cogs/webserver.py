@@ -119,16 +119,8 @@ class RecieverWebServer():
         return web.Response(status=404)
 
     async def title_notification(self, channel, data):
-        stream = await self.bot.api.get_stream(channel)
         event = self.bot.api.get_event(data)
-        if stream == None:
-            live = False
-        else:
-            live = True
-        if not live:
-            self.bot.dispatch("title_change", event)
-        else:
-            self.bot.log.info(f"{channel} is live, ignoring title change")
+        self.bot.dispatch("title_change", event)
 
         return web.Response(status=202)
 

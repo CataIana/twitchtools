@@ -46,6 +46,10 @@ class StreamStatus(commands.Cog):
 
         await self.write_title_cache(self.bot.title_cache)
 
+        stream = await self.bot.api.get_stream(event.broadcaster.username)
+        if stream:
+            self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
+
         #Create embed for discord
         embed = discord.Embed(description=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=utcnow())
         if event.title != old_title:
