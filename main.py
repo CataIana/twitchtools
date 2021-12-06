@@ -1,6 +1,5 @@
 from __future__ import annotations
 import discord
-from dislash import InteractionClient
 from discord.ext import commands
 from discord.utils import MISSING
 from cogs.webserver import RecieverWebServer
@@ -10,8 +9,9 @@ from time import time
 import logging
 import json
 import sys
-
 from twitchtools.user import PartialUser
+from twitchtools.interaction_client import CustomInteractionClient
+from typing import Deque
 
 class TwitchCallBackBot(commands.Bot):
     from twitchtools.files import get_callbacks
@@ -28,7 +28,7 @@ class TwitchCallBackBot(commands.Bot):
         shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 
-        self.slash: InteractionClient = InteractionClient(self)
+        self.slash: CustomInteractionClient = CustomInteractionClient(self)
         self.api: http = http(self, auth_file=f"config/auth.json")
         self.web_server: RecieverWebServer = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
@@ -47,7 +47,7 @@ class TwitchCallBackBot(commands.Bot):
         self.title_callbacks: dict = MISSING
         self.channel_cache: dict = MISSING
         self.title_cache: dict = MISSING
-        self.notif_cache: dict = MISSING
+        self.notif_cache: Deque = MISSING
 
     async def close(self):
         await self.aSession.close()

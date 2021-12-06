@@ -4,6 +4,7 @@ from .enums import Live, Languages
 from datetime import datetime
 from .user import PartialUser
 from .asset import Thumbnail
+from typing import Optional
 
 class Stream:
     def __init__(self, id: int, user_id: int, user_login: str, user_name: str, game_id: int,
@@ -12,7 +13,7 @@ class Stream:
         self.stream_id: int = int(id)
         self.id: int = id
         self.user: PartialUser = PartialUser(user_id, user_login, user_name)
-        self.game_id: int = int(game_id)
+        self.game_id: Optional[int] = int(game_id) if game_id != '' else None
         self.game: str = "<no game>" if game_name == "" else game_name
         self.game_name: str = self.game
         self.type: Live = Live(type)

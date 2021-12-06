@@ -1,6 +1,7 @@
+from typing import Deque, List, Union
 import aiofiles
 import json
-from typing import Union
+from collections import deque
 
 async def get_callbacks(self) -> dict:
     try:
@@ -54,15 +55,15 @@ async def write_title_cache(self, data: dict) -> None:
     async with aiofiles.open("cache/titlecache.cache", "w") as f:
         await f.write(json.dumps(data, indent=4))
 
-async def get_notif_cache(self) -> list:
+async def get_notif_cache(self) -> Deque:
     try:
         async with aiofiles.open("cache/notifcache.cache") as f:
-            return json.loads(await f.read())
+            return deque(json.loads(await f.read()), maxlen=10)
     except FileNotFoundError:
         return []
     except json.decoder.JSONDecodeError:
         return []
 
-async def write_notif_cache(self, data: list) -> None:
+async def write_notif_cache(self, data: Union[Deque, List]) -> None:
     async with aiofiles.open("cache/notifcache.cache", "w") as f:
-        await f.write(json.dumps(data, indent=4))
+        await f.write(json.dumps(list(data), indent=4))

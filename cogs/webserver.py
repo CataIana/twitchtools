@@ -53,12 +53,13 @@ class RecieverWebServer():
         if signature != expected_signature:
             return False
         self.bot.notif_cache.append(message_id)
-        if len(self.bot.notif_cache) > 10: notifcache = self.bot.notif_cache[1:]
         await self.write_notif_cache(self.bot.notif_cache)
         return True
             
 
     async def post_request(self, request: web.Request, callback_type: str, channel: str):
+        if channel == "_callbacktest":
+            return web.Response(status=204)
         try:
             if callback_type == "titlecallback":
                 if not getattr(self.bot, "title_callbacks", None):

@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands, tasks
-from discord.utils import utcnow
+from discord.utils import utcnow, snowflake_time
 from dislash import application_commands
-from dislash import Option, OptionType, OptionChoice, SlashInteraction
+from dislash import Option, OptionType, OptionChoice, SlashInteraction, MessageInteraction, ContextMenuInteraction
 import json
 import asyncio
 from datetime import datetime
@@ -20,6 +20,7 @@ from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream
 from twitchtools.exceptions import SubscriptionError
+from twitchtools.interaction_client import CustomSlashInteraction, CustomContextMenuInteraction, CustomMessageInteraction
 from typing import Union
 
 
@@ -86,8 +87,46 @@ class RecieverCommands(commands.Cog):
         self.bot.log.info("Finished streamer catchup")
 
     @commands.Cog.listener()
+    async def on_dislash_interaction(self, payload: dict):
+        await self.bot.wait_until_ready()
+        _type = payload.get("type", 1)
+        c = None
+        if _type == 2:
+            data_type = payload.get("data", {}).get("type", 1)
+            if data_type == 1:
+                c = self.get_custom_slash_context(CustomSlashInteraction)
+            elif data_type in (2, 3):
+                c = self.get_custom_slash_context(CustomContextMenuInteraction)
+        elif _type == 3:
+            c = self.get_custom_slash_context(CustomMessageInteraction)
+        ctx = await self.bot.slash.get_context(payload, cls=c)
+        await self.bot.slash.invoke(ctx)
+
+    def get_custom_slash_context(self, base: Union[SlashInteraction, MessageInteraction, ContextMenuInteraction]):
+        class SlashCustomContext(base):
+            def __init__(self, *args, **kwargs):
+                self.deferred = False
+                super().__init__(*args, **kwargs)
+
+            @property
+            def created_at(self):
+                return snowflake_time(self.id)
+
+            async def defer(self):
+                await self.send(type=5)
+                self.deferred = True
+            
+            async def send(self, *args, **kwargs):
+                if self.deferred:
+                    kwargs.pop("ephemeral", None)
+                    return await super().edit(*args, **kwargs)
+                return await super().send(*args, **kwargs)
+        
+        return SlashCustomContext
+
+    @commands.Cog.listener()
     async def on_slash_command(self, ctx: SlashInteraction):
-        if ctx.slash_command is not None:
+        if ctx.slash_command:
             self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
         else:
             self.bot.log.info(f"Attemped to run invalid slash command!")
@@ -109,6 +148,7 @@ class RecieverCommands(commands.Cog):
     @application_commands.slash_command(description="Owner Only: Run streamer catchup manually")
     @application_commands.is_owner()
     async def catchup(self, ctx: SlashInteraction):
+        await ctx.defer()
         self.bot.log.info("Manually Running streamer catchup...")
         await self.bot.catchup_streamers()
         self.bot.log.info("Finished streamer catchup")
@@ -320,6 +360,7 @@ class RecieverCommands(commands.Cog):
         await self.write_callbacks(self.bot.callbacks)
 
         if make_subscriptions:
+            await ctx.defer()
             try:
                 sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=self.bot.callbacks[streamer.username]["secret"])
                 self.bot.callbacks[streamer.username]["online_id"] = sub1.id
@@ -466,6 +507,7 @@ class RecieverCommands(commands.Cog):
         await self.write_title_callbacks(self.bot.title_callbacks)
 
         if make_subscriptions:
+            await ctx.defer()
             try:
                 sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=self.bot.title_callbacks[streamer.username]["secret"])
             except SubscriptionError as e:
@@ -526,21 +568,23 @@ class RecieverCommands(commands.Cog):
     @application_commands.slash_command(description="Owner Only: Test if callback is functioning correctly")
     @application_commands.is_owner()
     async def testcallback(self, ctx: SlashInteraction):
+        await ctx.defer()
         #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
         try:
             r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
         except asyncio.TimeoutError:
             return await ctx.send(f"Callback test failed. Server timed out")
-        if r.status == 400:
-            await ctx.send("Callback Test Successful. Returned expected HTTP status code 400")
+        if r.status == 204:
+            await ctx.send("Callback Test Successful. Returned expected HTTP status code 204")
         else:
-            await ctx.send(f"Callback test failed. Expected HTTP status code 400 but got {r.status}")
+            await ctx.send(f"Callback test failed. Expected HTTP status code 204 but got {r.status}")
 
 
     @application_commands.slash_command(description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
     @application_commands.is_owner()
     async def resubscribe(self, ctx: SlashInteraction):
         self.bot.log.info("Running live alert resubscribe")
+        await ctx.defer()
         if not getattr(self.bot, "callbacks", None):
             self.bot.callbacks = await self.get_callbacks()
         for streamer, data in self.bot.callbacks.items():
