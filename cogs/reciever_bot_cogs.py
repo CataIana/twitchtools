@@ -367,7 +367,7 @@ class RecieverCommands(commands.Cog):
                 sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=self.bot.callbacks[streamer.username]["secret"])
                 self.bot.callbacks[streamer.username]["offline_id"] = sub2.id
             except SubscriptionError as e:
-                await self.callback_deletion(ctx, streamer.username, config_file="title_callbacks.json", _type="title")
+                await self.callback_deletion(ctx, streamer.username, config_file="callbacks.json")
                 raise SubscriptionError(str(e))
 
         await self.write_callbacks(self.bot.callbacks)
