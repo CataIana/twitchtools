@@ -1,7 +1,6 @@
-git+https://github.com/Rapptz/discord.py.git#egg=discord.py
+disnake
 aiohttp
 asyncio
 aiofiles
-dislash.py
 psutil
 python-dateutil

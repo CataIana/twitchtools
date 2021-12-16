@@ -1,20 +1,14 @@
-from dislash.application_commands.errors import ApplicationCommandError
+from disnake.ext import commands
 
 
-class TwitchToolsException(ApplicationCommandError):
+class TwitchToolsException(commands.CommandError):
     pass
 
 class BadAuthorization(TwitchToolsException):
     def __init__(self):
         super().__init__("Bad authorization! Please check your configuration.")
 
-class HTTPException(TwitchToolsException):
-    pass
-
 class BadRequest(TwitchToolsException):
-    pass
-
-class BadArgument(TwitchToolsException):
     pass
 
 class SubscriptionError(TwitchToolsException):

@@ -1,5 +1,5 @@
+from disnake.ext import commands
 from re import findall
-from .exceptions import BadArgument
 
 class Asset:
     def __init__(self, avatar, size=None):
@@ -27,7 +27,7 @@ class Avatar(Asset):
 
     def with_size(self, size):
         if not self.within_range(size):
-            raise BadArgument("Size must be 300 or 600!")
+            raise commands.BadArgument("Size must be 300 or 600!")
         return Avatar(self.url.format(width=size, height=size), size=size)
 
 class OfflineImage(Asset):
@@ -44,7 +44,7 @@ class OfflineImage(Asset):
 
     def with_size(self, width, height):
         if not self.within_range(width, height):
-            raise BadArgument("Size must be not be smaller than 1 or greater than 2048")
+            raise commands.BadArgument("Size must be not be smaller than 1 or greater than 2048")
         return OfflineImage(self.url.format(width=width, height=height), size=(width, height))
 
 class Thumbnail(OfflineImage):
@@ -53,5 +53,5 @@ class Thumbnail(OfflineImage):
 
     def with_size(self, width, height):
         if not self.within_range(width, height):
-            raise BadArgument("Size must be not be smaller than 1 or greater than 2048")
+            raise commands.BadArgument("Size must be not be smaller than 1 or greater than 2048")
         return Thumbnail(self.url.format(width=width, height=height), size=(width, height))

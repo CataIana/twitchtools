@@ -1,6 +1,6 @@
-import discord
-from discord.ext import commands
-from discord.utils import utcnow
+import disnake
+from disnake.ext import commands
+from disnake.utils import utcnow
 from twitchtools.user import User
 from twitchtools.subscription import TitleEvent
 from twitchtools.stream import Stream
@@ -52,7 +52,7 @@ class StreamStatus(commands.Cog):
             return
 
         #Create embed for discord
-        embed = discord.Embed(description=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=utcnow())
+        embed = disnake.Embed(description=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=utcnow())
         if event.title != old_title:
             embed.add_field(name="Old Title", value=old_title, inline=True)
             embed.add_field(name="New Title", value=event.title, inline=True)
@@ -76,9 +76,9 @@ class StreamStatus(commands.Cog):
                     role_mention = f"<@&{data['role_id']}>"
                 try:
                     await c.send(f"{role_mention}", embed=embed)
-                except discord.Forbidden:
+                except disnake.Forbidden:
                     pass
-                except discord.HTTPException:
+                except disnake.HTTPException:
                     pass
 
     @commands.Cog.listener()
@@ -104,9 +104,9 @@ class StreamStatus(commands.Cog):
                         await channel.delete()
                     elif self.bot.callbacks[streamer.username]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         await channel.edit(name="stream-offline")
-                except discord.Forbidden:
+                except disnake.Forbidden:
                     continue
-                except discord.HTTPException:
+                except disnake.HTTPException:
                     continue
         
         # Delete live channel data after being used
@@ -118,7 +118,7 @@ class StreamStatus(commands.Cog):
             if channel is not None:
                 try: #Try to get the live alerts message, skipping if not found
                     message = await channel.fetch_message(alert_ids["message"]) 
-                except discord.NotFound:
+                except disnake.NotFound:
                     continue
                 else:
                     try: #Get the live alert embed, skipping it was removed, or something else happened
@@ -131,7 +131,7 @@ class StreamStatus(commands.Cog):
                             embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]}"
                             try:
                                 await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
-                            except discord.Forbidden: #In case something weird happens
+                            except disnake.Forbidden: #In case something weird happens
                                 continue
                         except IndexError: #In case something weird happens when parsing the embed values
                             self.bot.log.warning(f"Error editing message to offline in {channel.guild.name}")
@@ -170,7 +170,7 @@ class StreamStatus(commands.Cog):
         await self.do_webhook(self.bot.callbacks, stream)
         
         # Create embed message
-        embed = discord.Embed(
+        embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
             description=f"Playing {stream.game} for {stream.view_count} viewers\n[Watch Stream](https://twitch.tv/{stream.user.name})",
             colour=8465372, timestamp=stream.started_at)
@@ -178,13 +178,13 @@ class StreamStatus(commands.Cog):
         embed.set_footer(text="Mew")
 
         #Permission overrides
-        SelfOverride = discord.PermissionOverwrite() # Make sure the bot has permission to access the channel
+        SelfOverride = disnake.PermissionOverwrite() # Make sure the bot has permission to access the channel
         SelfOverride.view_channel = True
         SelfOverride.send_messages = True
-        DefaultRole = discord.PermissionOverwrite() # Deny @everyone access
+        DefaultRole = disnake.PermissionOverwrite() # Deny @everyone access
         DefaultRole.view_channel = False
         DefaultRole.send_messages = False
-        OverrideRole = discord.PermissionOverwrite() # Give users with the role access to view only
+        OverrideRole = disnake.PermissionOverwrite() # Give users with the role access to view only
         OverrideRole.view_channel = True
 
         live_channels = []
@@ -211,9 +211,9 @@ class StreamStatus(commands.Cog):
                     try:
                         live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
                         live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
-                    except discord.Forbidden:
+                    except disnake.Forbidden:
                         pass
-                    except discord.HTTPException:
+                    except disnake.HTTPException:
                         pass
 
             if alert_info["mode"] == 0: # Temporary live channel mode
@@ -233,7 +233,7 @@ class StreamStatus(commands.Cog):
                         if channel is not None:
                             await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
                             live_channels.append(channel.id)
-                    except discord.Forbidden:
+                    except disnake.Forbidden:
                         self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
             
             # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
@@ -243,7 +243,7 @@ class StreamStatus(commands.Cog):
                     try:
                         await channel.edit(name="🔴now-live")
                         live_channels.append(channel.id)
-                    except discord.Forbidden:
+                    except disnake.Forbidden:
                         self.bot.log.warning(f"Forbidden error updating {stream.user.username} in guild {channel.guild.name}")
                 else:
                     self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}1")
@@ -261,22 +261,22 @@ class StreamStatus(commands.Cog):
                 format_ = f"{stream.user.display_name} is live! Playing {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
             if type(callbacks[stream.user.username]["webhook"]) == list:
                 for webhook in callbacks[stream.user.username]["webhook"]:
-                    if discord.__version__ == "2.0.0a":
-                        webhook_obj = discord.Webhook.from_url(webhook, session=self.bot.aSession)
+                    if disnake.__version__ == "2.0.0a":
+                        webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                     else:
-                        webhook_obj = discord.Webhook.from_url(webhook, session=discord.AsyncWebhookAdapter(self.bot.aSession))
+                        webhook_obj = disnake.Webhook.from_url(webhook, session=disnake.AsyncWebhookAdapter(self.bot.aSession))
                     try:
                         await webhook_obj.send(content=format_)
-                    except discord.NotFound:
+                    except disnake.NotFound:
                         pass
             else:
-                if discord.__version__ == "2.0.0a":
-                    webhook = discord.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=self.bot.aSession)
+                if disnake.__version__ == "2.0.0a":
+                    webhook = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=self.bot.aSession)
                 else:
-                    webhook_obj = discord.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=discord.AsyncWebhookAdapter(self.bot.aSession))
+                    webhook_obj = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=disnake.AsyncWebhookAdapter(self.bot.aSession))
                 try:
                     await webhook.send(content=format_)
-                except discord.NotFound:
+                except disnake.NotFound:
                     pass
 
 def setup(bot):

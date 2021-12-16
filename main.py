@@ -1,7 +1,7 @@
 from __future__ import annotations
-import discord
-from discord.ext import commands
-from discord.utils import MISSING
+import disnake
+from disnake.ext import commands
+from disnake.utils import MISSING
 from cogs.webserver import RecieverWebServer
 from twitchtools.api import http
 from aiohttp import ClientSession
@@ -10,15 +10,27 @@ import logging
 import json
 import sys
 from twitchtools.user import PartialUser
-from twitchtools.interaction_client import CustomInteractionClient
-from typing import Deque
+from twitchtools.connection_state import CustomConnectionState
+from typing import Deque, TypeVar, Type, Any
+from enum import Enum
 
-class TwitchCallBackBot(commands.Bot):
+ACXT = TypeVar("ACXT", bound="disnake.ApplicationCommandInteraction")
+
+class Emotes(Enum):
+    error: str = "<:red_tick:809191812337369118>"
+    success: str = "<:green_tick:809191812434231316>"
+
+    #Override str conversion to return value so we don't have to add .value to every usage
+    def __str__(self):
+        #return "%s.%s" % (self.__class__.__name__, self._name_)
+        return self._value_
+
+class TwitchCallBackBot(commands.InteractionBot):
     from twitchtools.files import get_callbacks
     def __init__(self):
-        intents = discord.Intents.none()
+        intents = disnake.Intents.none()
         intents.guilds = True
-        super().__init__(command_prefix=commands.when_mentioned_or("t!"), intents=intents, activity=discord.Activity(type=discord.ActivityType.listening, name="stream status"))
+        super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
 
         self.log: logging.Logger = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
@@ -28,7 +40,6 @@ class TwitchCallBackBot(commands.Bot):
         shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 
-        self.slash: CustomInteractionClient = CustomInteractionClient(self)
         self.api: http = http(self, auth_file=f"config/auth.json")
         self.web_server: RecieverWebServer = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
@@ -37,11 +48,13 @@ class TwitchCallBackBot(commands.Bot):
         self.load_extension(f"cogs.emotes_sync")
         self.load_extension(f"cogs.error_listener")
         self.load_extension(f"cogs.streamer_status")
-        self.colour: discord.Colour = discord.Colour.from_rgb(128, 0, 128)
+        self.colour = disnake.Colour.from_rgb(128, 0, 128)
+        self.emotes = Emotes
         with open("config/auth.json") as f:
             self.auth: dict = json.load(f)
         self.token = self.auth["bot_token"]
         self._uptime = time()
+        self.application_invoke = self.process_application_commands
 
         self.callbacks: dict = MISSING
         self.title_callbacks: dict = MISSING
@@ -61,6 +74,21 @@ class TwitchCallBackBot(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
+
+    def _get_state(self, **options: Any) -> CustomConnectionState:
+        return CustomConnectionState(
+            dispatch=self.dispatch,
+            handlers=self._handlers,
+            hooks=self._hooks,
+            http=self.http,
+            loop=self.loop,
+            **options,
+        )
+
+    async def on_application_command(self, interaction): return
+
+    async def get_slash_context(self, interaction: disnake.Interaction, *, cls: Type[ACXT] = disnake.ApplicationCommandInteraction):
+        return cls(data=interaction, state=self._connection, bot=self)
 
     async def catchup_streamers(self):
         await self.wait_until_ready()

@@ -1,7 +1,7 @@
 from json.decoder import JSONDecodeError
-from discord import Forbidden, HTTPException
-from discord.emoji import Emoji
-from discord.ext import commands, tasks
+from disnake import Forbidden, HTTPException
+from disnake.emoji import Emoji
+from disnake.ext import commands, tasks
 import json
 import aiofiles
 from twitchtools.user import User

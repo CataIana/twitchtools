@@ -6,4 +6,5 @@ from .subscription import *
 from .user import *
 from .exceptions import *
 from .files import *
-from .interaction_client import CustomInteractionClient, CustomSlashInteraction, CustomMessageInteraction, CustomContextMenuInteraction
+from .custom_context import ApplicationCustomContext
+from .connection_state import CustomConnectionState
