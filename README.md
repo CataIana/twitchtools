@@ -21,3 +21,5 @@ Emote sync doesn't have an interface yet since I haven't fully finished it. If y
     "streamer": "<streamer_login>" 
     }  
 }```
+
+Copyright &copy; 2021 CataIana, under the GNU GPLv3 License.
