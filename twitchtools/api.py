@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import aiofiles
 import asyncio
 import json
+from disnake import HTTPException
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from .exceptions import *

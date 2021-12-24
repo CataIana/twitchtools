@@ -31,3 +31,6 @@ class Stream:
         self.tag_ids: list = tag_ids
         self.is_mature: bool = bool(is_mature)
 
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} streamer={self.user} game={self.game} stream_id={self.id}>"
+
