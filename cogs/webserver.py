@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-from json.decoder import JSONDecodeError
 from aiohttp import web
+from twitchtools.enums import AlertOrigin
+from json.decoder import JSONDecodeError
 import hmac
 import hashlib
+from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
@@ -128,7 +130,7 @@ class RecieverWebServer():
     async def notification(self, channel, data):
         channel = data.get("broadcaster_user_login", channel)
         streamer = await self.bot.api.get_user(user_login=channel)
-        stream = await self.bot.api.get_stream(streamer)
+        stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
 
         live = stream is not None
 

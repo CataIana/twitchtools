@@ -1,6 +1,7 @@
 from typing import Deque, List, Union
 import aiofiles
 import json
+import os
 from collections import deque
 
 async def get_callbacks(self) -> dict:
@@ -13,6 +14,8 @@ async def get_callbacks(self) -> dict:
         return {}
 
 async def write_callbacks(self, data: dict) -> None:
+    if not os.path.isdir("cache"):
+        os.mkdir("cache")
     async with aiofiles.open("config/callbacks.json", "w") as f:
         await f.write(json.dumps(data, indent=4))
 
@@ -26,6 +29,8 @@ async def get_title_callbacks(self) -> dict:
         return {}
 
 async def write_title_callbacks(self, data: dict) -> None:
+    if not os.path.isdir("cache"):
+        os.mkdir("cache")
     async with aiofiles.open("config/title_callbacks.json", "w") as f:
         await f.write(json.dumps(data, indent=4))
 
@@ -39,6 +44,8 @@ async def get_channel_cache(self) -> dict:
         return {}
 
 async def write_channel_cache(self, data: dict) -> None:
+    if not os.path.isdir("cache"):
+        os.mkdir("cache")
     async with aiofiles.open("cache/channelcache.cache", "w") as f:
         await f.write(json.dumps(data, indent=4))
 
@@ -52,6 +59,8 @@ async def get_title_cache(self) -> dict:
         return {}
 
 async def write_title_cache(self, data: dict) -> None:
+    if not os.path.isdir("cache"):
+        os.mkdir("cache")
     async with aiofiles.open("cache/titlecache.cache", "w") as f:
         await f.write(json.dumps(data, indent=4))
 
@@ -65,5 +74,7 @@ async def get_notif_cache(self) -> Deque:
         return []
 
 async def write_notif_cache(self, data: Union[Deque, List]) -> None:
+    if not os.path.isdir("cache"):
+        os.mkdir("cache")
     async with aiofiles.open("cache/notifcache.cache", "w") as f:
         await f.write(json.dumps(list(data), indent=4))

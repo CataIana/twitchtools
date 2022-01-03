@@ -1,9 +1,7 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools.user import User
-from twitchtools.subscription import TitleEvent
-from twitchtools.stream import Stream
+from twitchtools import Stream, TitleEvent, User, AlertOrigin
 from time import time
 
 
@@ -46,7 +44,7 @@ class StreamStatus(commands.Cog):
 
         await self.write_title_cache(self.bot.title_cache)
 
-        stream = await self.bot.api.get_stream(event.broadcaster.username)
+        stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
             self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
             return
@@ -143,7 +141,7 @@ class StreamStatus(commands.Cog):
         await self.write_channel_cache(self.bot.channel_cache)
 
     def on_cooldown(self, alert_cooldown: int) -> bool:
-        if int(time()) - alert_cooldown < 600:
+        if int(time()) - alert_cooldown < self.bot.alert_cooldown:
             return True
         return False
 
@@ -158,7 +156,8 @@ class StreamStatus(commands.Cog):
 
         # Do not re-run this function is the streamer is already live
         if list(self.bot.channel_cache.get(stream.user.username, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
-            self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
+            if stream.origin == AlertOrigin.callback:
+                self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
             return
 
         if on_cooldown: # There is a 10 minute cooldown between alerts, but live channels will still be created
@@ -193,6 +192,11 @@ class StreamStatus(commands.Cog):
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
                 continue
+
+            if alert_info.get("title_phrase", None):
+                if alert_info.get("title_phrase") not in stream.title.lower():
+                    self.bot.log.info(f"Didn't match title phrase for {guild.name}, skipping alert")
+                    continue
 
             #Format role mention
             if alert_info["role_id"] == "everyone":
@@ -240,13 +244,14 @@ class StreamStatus(commands.Cog):
             elif alert_info["mode"] == 2:
                 channel = self.bot.get_channel(alert_info["channel_id"])
                 if channel is not None:
-                    try:
-                        await channel.edit(name="🔴now-live")
-                        live_channels.append(channel.id)
-                    except disnake.Forbidden:
-                        self.bot.log.warning(f"Forbidden error updating {stream.user.username} in guild {channel.guild.name}")
+                    if not alert_info.get("disable_channel_rename", False):
+                        try:
+                            await channel.edit(name="🔴now-live")
+                            live_channels.append(channel.id)
+                        except disnake.Forbidden:
+                            self.bot.log.warning(f"Forbidden error updating {stream.user.username} in guild {channel.guild.name}")
                 else:
-                    self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}1")
+                    self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}")
         
         #Finally, combine all data into channel cache, and update the file
         self.bot.channel_cache[stream.user.username] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}

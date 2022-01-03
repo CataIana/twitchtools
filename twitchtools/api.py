@@ -3,11 +3,12 @@ from typing import TYPE_CHECKING
 import aiofiles
 import asyncio
 import json
+from disnake import HTTPException
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from .exceptions import *
 from .subscription import Subscription, SubscriptionEvent, TitleEvent
-from .enums import SubscriptionType
+from .enums import AlertOrigin, SubscriptionType
 from .user import PartialUser, User
 from .stream import Stream
 from typing import Union, List
@@ -98,7 +99,7 @@ class http:
         json_data = j["data"][0]
         return User(**json_data)
 
-    async def get_streams(self, user_ids=[], user_logins=[]) -> List[Stream]:
+    async def get_streams(self, user_ids=[], user_logins=[], origin: AlertOrigin = AlertOrigin.unavailable) -> List[Stream]:
         queries = []
         queries += [f"user_id={id}" for id in user_ids]
         queries += [f"user_login={login}" for login in user_logins]
@@ -112,11 +113,13 @@ class http:
                 raise HTTPException
             j = await r.json()
             for stream in j["data"]:
-                streams.append(Stream(**stream))
+                s = Stream(**stream)
+                s.origin = origin
+                streams.append(s)
             
         return streams
 
-    async def get_stream(self, user: Union[PartialUser, User, str]) -> Union[Stream, None]:
+    async def get_stream(self, user: Union[PartialUser, User, str], origin: AlertOrigin = AlertOrigin.unavailable) -> Union[Stream, None]:
         if type(user) in [PartialUser, User]:
             user_login = user.username
         else:
@@ -128,7 +131,9 @@ class http:
         if j["data"] == []:
             return None
         json_data = j["data"][0]
-        return Stream(**json_data)
+        s = Stream(**json_data)
+        s.origin = origin
+        return s
 
     async def get_subscription(self, id) -> Union[Subscription, None]:
         r = await self._request(f"{self.base}/eventsub/subscriptions")

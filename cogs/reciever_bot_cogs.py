@@ -1,5 +1,5 @@
 import disnake
-from disnake import Embed, OptionType, OptionChoice, TextChannel, Role
+from disnake import Embed, TextChannel, Role
 from disnake.ext import commands, tasks
 from disnake.utils import utcnow
 import json
@@ -18,6 +18,7 @@ from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext
+from twitchtools import AlertOrigin
 from twitchtools.exceptions import SubscriptionError
 from typing import Union
 from types import CoroutineType
@@ -82,9 +83,8 @@ class RecieverCommands(commands.Cog):
 
     @tasks.loop(seconds=1800)
     async def backup_checks(self):
-        self.bot.log.info("Running streamer catchup...")
         await self.bot.catchup_streamers()
-        self.bot.log.info("Finished streamer catchup")
+        self.bot.log.info("Ran streamer catchup")
 
     @commands.Cog.listener()
     async def on_raw_interaction(self, interaction):
@@ -308,9 +308,11 @@ class RecieverCommands(commands.Cog):
                             "Mode 0 - Creates a temporary channel when the streamer is live": 0,
                             "Mode 2 - Updates a persistent status channel when the streamer goes live and offline": 2
                         }),
-                        notification_channel: TextChannel,
-                        alert_role: Role = None,
-                        status_channel: TextChannel = None
+                        notification_channel: TextChannel = commands.Param(description="The channel for notifications to be sent in"),
+                        alert_role: Role = commands.Param(default=None, description="The role to be pinged for alerts"),
+                        status_channel: TextChannel = commands.Param(default=None, description="Only for Mode 2: The channel that is renamed when streamer goes live/offline"),
+                        title_phrase: str = commands.Param(default=None, description="Alerts are only sent if the phrase provided is in the title of the stream. CASE INSENSITIVE"),
+                        disable_channel_rename: bool = commands.Param(default=False, description="Only for Mode 2: Disables renaming of channel when going live/offline.")
         ):
         # Run checks on all the supplied arguments
         streamer = await self.check_streamer(username=streamer_username)
@@ -347,6 +349,10 @@ class RecieverCommands(commands.Cog):
             self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
         if alert_mode == 2:
             self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
+        if title_phrase:
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["title_phrase"] = title_phrase.lower()
+        if disable_channel_rename and alert_mode == 2:
+            self.bot.callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["disable_channel_rename"] = disable_channel_rename
 
         await self.write_callbacks(self.bot.callbacks)
 
@@ -364,9 +370,9 @@ class RecieverCommands(commands.Cog):
         await self.write_callbacks(self.bot.callbacks)
 
         #Run catchup on streamer immediately
-        stream_status = await self.bot.api.get_stream(streamer.username)
+        stream_status = await self.bot.api.get_stream(streamer.username, origin=AlertOrigin.catchup)
         if stream_status is None:
-            if status_channel is not None:
+            if status_channel is not None and not disable_channel_rename:
                 await status_channel.edit(name="stream-offline")
             self.bot.dispatch("streamer_offline", streamer)
         else:
@@ -379,6 +385,10 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Alert Mode", value=alert_mode, inline=True)
         if alert_mode == 2:
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
+            if disable_channel_rename:
+                embed.add_field(name="Status Channel Rename", value="Disabled", inline=True)
+        if title_phrase:
+            embed.add_field(name="Title Alert Phrase", value=title_phrase, inline=True)
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="List all the active streamer alerts setup in this server")
@@ -387,7 +397,7 @@ class RecieverCommands(commands.Cog):
         if not getattr(self.bot, "callbacks", None):
             self.bot.callbacks = await self.get_callbacks()
 
-        uwu = f"```nim\n{'Channel':15s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode \n"
+        uwu = f"```nim\n{'Channel':15s} {'Alert Role':18s} {'Alert Channel':15s} {'Alert Mode':12s} {'Disable Channel Rename':22s} {'Title Phrase':20s}\n"
         for x, y in self.bot.callbacks.items():
             if str(ctx.guild.id) in y["alert_roles"].keys():
                 info = y["alert_roles"][str(ctx.guild.id)]
@@ -414,11 +424,11 @@ class RecieverCommands(commands.Cog):
                 else:
                     channel_override = ""
 
-                if len(uwu + f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n") > 1800:
+                if len(uwu + f"{x:15s} {alert_role:18s} {channel_override:15s} {str(info.get('mode', 2)):12s} {str(info.get('disable_channel_rename', False)):22s} {info.get('title_phrase', ''):20s}\n") > 1800:
                     uwu += "```"
                     await ctx.send(uwu)
                     uwu = "```nim\n"
-                uwu += f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n"
+                uwu += f"{x:15s} {alert_role:18s} {channel_override:15s} {str(info.get('mode', 2)):12s} {str(info.get('disable_channel_rename', False)):22s} {info.get('title_phrase', ''):20s}\n"
         uwu += "```"
         await ctx.send(uwu)
 
@@ -521,7 +531,7 @@ class RecieverCommands(commands.Cog):
         Remove live alerts for a streamer
         """
         await self.callback_deletion(ctx, streamer, config_file="callbacks.json", _type="status")
-        await ctx.send(f"{self.bot.emotes.success} Delete live alerts for {streamer}")
+        await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     @commands.slash_command()
     @commands.has_guild_permissions(administrator=True)

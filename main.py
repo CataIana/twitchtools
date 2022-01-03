@@ -9,7 +9,7 @@ from time import time
 import logging
 import json
 import sys
-from twitchtools.user import PartialUser
+from twitchtools import PartialUser, AlertOrigin
 from twitchtools.connection_state import CustomConnectionState
 from typing import Deque, TypeVar, Type, Any
 from enum import Enum
@@ -62,6 +62,8 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.title_cache: dict = MISSING
         self.notif_cache: Deque = MISSING
 
+        self.alert_cooldown = 1800
+
     async def close(self):
         await self.aSession.close()
         self.log.info("Shutting down...")
@@ -96,7 +98,7 @@ class TwitchCallBackBot(commands.InteractionBot):
             self.callbacks = await self.get_callbacks() #Get callback dict
         if not self.callbacks:
             return
-        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in self.callbacks.values()]) #Fetch all streamers, returning the currently live ones
+        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in self.callbacks.values()], origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
         online_streams = [stream.user.id for stream in streams] #We only need the ID from them
         for streamer, data in self.callbacks.items(): #Iterate through all callbacks and update all streamers
             if data["channel_id"] in online_streams:

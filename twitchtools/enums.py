@@ -1,5 +1,10 @@
 from enum import Enum
 
+class AlertOrigin(Enum):
+    catchup = "catchup"
+    callback = "callback"
+    unavailable = "unavailable"
+
 class BroadcasterType(Enum):
     partner = "partner"
     affiliate = "affiliate"
