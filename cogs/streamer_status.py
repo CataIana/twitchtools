@@ -1,9 +1,7 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools.user import User
-from twitchtools.subscription import TitleEvent
-from twitchtools.stream import Stream
+from twitchtools import Stream, TitleEvent, User, AlertOrigin
 from time import time
 
 
@@ -46,7 +44,7 @@ class StreamStatus(commands.Cog):
 
         await self.write_title_cache(self.bot.title_cache)
 
-        stream = await self.bot.api.get_stream(event.broadcaster.username)
+        stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
             self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
             return
@@ -158,7 +156,8 @@ class StreamStatus(commands.Cog):
 
         # Do not re-run this function is the streamer is already live
         if list(self.bot.channel_cache.get(stream.user.username, {"alert_cooldown": 0}).keys()) != ["alert_cooldown"]:
-            self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
+            if stream.origin == AlertOrigin.callback:
+                self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
             return
 
         if on_cooldown: # There is a 10 minute cooldown between alerts, but live channels will still be created

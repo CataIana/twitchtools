@@ -1,6 +1,6 @@
 from datetime import datetime
 from dateutil import parser
-from .enums import Live, Languages
+from .enums import Live, Languages, AlertOrigin
 from datetime import datetime
 from .user import PartialUser
 from .asset import Thumbnail
@@ -9,7 +9,7 @@ from typing import Optional
 class Stream:
     def __init__(self, id: int, user_id: int, user_login: str, user_name: str, game_id: int,
                     game_name: str, type: Live, title: str, viewer_count: int, started_at: datetime,
-                    language: Languages, thumbnail_url: str, tag_ids: list, is_mature: bool):
+                    language: Languages, thumbnail_url: str, tag_ids: list, is_mature: bool, origin: AlertOrigin = AlertOrigin.unavailable):
         self.stream_id: int = int(id)
         self.id: int = id
         self.user: PartialUser = PartialUser(user_id, user_login, user_name)
@@ -30,6 +30,7 @@ class Stream:
         self.thumbnail_url: Thumbnail = Thumbnail(thumbnail_url)
         self.tag_ids: list = tag_ids
         self.is_mature: bool = bool(is_mature)
+        self.origin: AlertOrigin = origin
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} streamer={self.user} game={self.game} stream_id={self.id}>"

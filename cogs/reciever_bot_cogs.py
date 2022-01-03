@@ -17,7 +17,7 @@ import psutil
 from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
-from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext
+from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin
 from twitchtools.exceptions import SubscriptionError
 from typing import Union
 from types import CoroutineType
@@ -82,9 +82,8 @@ class RecieverCommands(commands.Cog):
 
     @tasks.loop(seconds=1800)
     async def backup_checks(self):
-        self.bot.log.info("Running streamer catchup...")
         await self.bot.catchup_streamers()
-        self.bot.log.info("Finished streamer catchup")
+        self.bot.log.info("Ran streamer catchup")
 
     @commands.Cog.listener()
     async def on_raw_interaction(self, interaction):
@@ -364,7 +363,7 @@ class RecieverCommands(commands.Cog):
         await self.write_callbacks(self.bot.callbacks)
 
         #Run catchup on streamer immediately
-        stream_status = await self.bot.api.get_stream(streamer.username)
+        stream_status = await self.bot.api.get_stream(streamer.username, origin=AlertOrigin.catchup)
         if stream_status is None:
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
