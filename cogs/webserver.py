@@ -9,13 +9,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
-class RecieverWebServer():
+class RecieverWebServer:
     from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         self.port = 18271
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
+
+        self.allow_unverified_requests: bool = False # TO BE USED ONLY FOR DEBUGGING PURPOSES
 
     async def start(self):
         runner = web.AppRunner(self.web_server)
@@ -34,8 +36,9 @@ class RecieverWebServer():
         return web.Response(status=404)
 
     async def verify_request(self, request: web.Request, secret: str):
-        if not getattr(self.bot, "notif_cache", None):
-            self.bot.notif_cache = await self.get_notif_cache()
+        if self.allow_unverified_requests:
+            return True
+        notif_cache = await self.get_notif_cache()
 
         try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
@@ -44,7 +47,7 @@ class RecieverWebServer():
         except KeyError as e:
             self.bot.log.info(f"Request Denied. Missing Key {e}")
             return False
-        if message_id in self.bot.notif_cache:
+        if message_id in notif_cache:
             return None
 
         hmac_message = message_id.encode("utf-8") + timestamp.encode("utf-8") + await request.read()
@@ -54,8 +57,8 @@ class RecieverWebServer():
         self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {signature}")
         if signature != expected_signature:
             return False
-        self.bot.notif_cache.append(message_id)
-        await self.write_notif_cache(self.bot.notif_cache)
+        notif_cache.append(message_id)
+        await self.write_notif_cache(notif_cache)
         return True
             
 
@@ -64,13 +67,9 @@ class RecieverWebServer():
             return web.Response(status=204)
         try:
             if callback_type == "titlecallback":
-                if not getattr(self.bot, "title_callbacks", None):
-                    self.bot.title_callbacks = await self.get_title_callbacks()
-                callbacks = self.bot.title_callbacks
+                callbacks = await self.get_title_callbacks()
             else:
-                if not getattr(self.bot, "callbacks", None):
-                    self.bot.callbacks = await self.get_callbacks()
-                callbacks = self.bot.callbacks
+                callbacks = await self.get_callbacks()
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
@@ -123,20 +122,24 @@ class RecieverWebServer():
 
     async def title_notification(self, channel, data):
         event = self.bot.api.get_event(data)
-        self.bot.dispatch("title_change", event)
+        self.bot.queue.put_nowait(event)
+        #self.bot.dispatch("title_change", event)
 
         return web.Response(status=202)
 
     async def notification(self, channel, data):
-        channel = data.get("broadcaster_user_login", channel)
+        channel = data["event"].get("broadcaster_user_login", channel)
         streamer = await self.bot.api.get_user(user_login=channel)
         stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
 
         live = stream is not None
 
+        
         if live:
-            self.bot.dispatch("streamer_online", stream)
+            #self.bot.dispatch("streamer_online", stream)
+            self.bot.queue.put_nowait(stream)
         else:
-            self.bot.dispatch("streamer_offline", streamer)
+            #self.bot.dispatch("streamer_offline", streamer)
+            self.bot.queue.put_nowait(streamer)
 
         return web.Response(status=202)
