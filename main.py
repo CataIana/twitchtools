@@ -1,7 +1,7 @@
 from __future__ import annotations
 import disnake
 from disnake.ext import commands
-from disnake.utils import MISSING
+from asyncio import Queue
 from cogs.webserver import RecieverWebServer
 from twitchtools.api import http
 from aiohttp import ClientSession
@@ -11,7 +11,7 @@ import json
 import sys
 from twitchtools import PartialUser, AlertOrigin
 from twitchtools.connection_state import CustomConnectionState
-from typing import Deque, TypeVar, Type, Any
+from typing import TypeVar, Type, Any
 from enum import Enum
 
 ACXT = TypeVar("ACXT", bound="disnake.ApplicationCommandInteraction")
@@ -32,6 +32,8 @@ class TwitchCallBackBot(commands.InteractionBot):
         intents.guilds = True
         super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
 
+        self.queue = Queue(maxsize=0)
+
         self.log: logging.Logger = logging.getLogger("TwitchTools")
         self.log.setLevel(logging.INFO)
 
@@ -48,6 +50,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.load_extension(f"cogs.emotes_sync")
         self.load_extension(f"cogs.error_listener")
         self.load_extension(f"cogs.streamer_status")
+        self.load_extension(f"cogs.queue_worker")
         self.colour = disnake.Colour.from_rgb(128, 0, 128)
         self.emotes = Emotes
         with open("config/auth.json") as f:
@@ -56,16 +59,11 @@ class TwitchCallBackBot(commands.InteractionBot):
         self._uptime = time()
         self.application_invoke = self.process_application_commands
 
-        self.callbacks: dict = MISSING
-        self.title_callbacks: dict = MISSING
-        self.channel_cache: dict = MISSING
-        self.title_cache: dict = MISSING
-        self.notif_cache: Deque = MISSING
-
         self.alert_cooldown = 1800
 
     async def close(self):
-        await self.aSession.close()
+        if not self.aSession.closed:
+            await self.aSession.close()
         self.log.info("Shutting down...")
         await super().close()
 
@@ -94,17 +92,18 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        if not getattr(self, "callbacks", None):
-            self.callbacks = await self.get_callbacks() #Get callback dict
-        if not self.callbacks:
+        callbacks = await self.get_callbacks() #Get callback dict
+        if not callbacks:
             return
-        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in self.callbacks.values()], origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
+        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()], origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
         online_streams = [stream.user.id for stream in streams] #We only need the ID from them
-        for streamer, data in self.callbacks.items(): #Iterate through all callbacks and update all streamers
+        for streamer, data in callbacks.items(): #Iterate through all callbacks and update all streamers
             if data["channel_id"] in online_streams:
-                self.dispatch("streamer_online", [x for x in streams if x.user.id == data["channel_id"]][0])
+                self.queue.put_nowait([x for x in streams if x.user.id == data["channel_id"]][0])
+                #self.dispatch("streamer_online", [x for x in streams if x.user.id == data["channel_id"]][0])
             else:
-                self.dispatch("streamer_offline", PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
+                #self.dispatch("streamer_offline", PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
+                self.queue.put_nowait(PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
     
 
 if __name__ == "__main__":

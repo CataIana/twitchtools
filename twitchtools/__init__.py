@@ -6,5 +6,6 @@ from .subscription import *
 from .user import *
 from .exceptions import *
 from .files import *
+from .timedelta import human_timedelta
 from .custom_context import ApplicationCustomContext
 from .connection_state import CustomConnectionState
