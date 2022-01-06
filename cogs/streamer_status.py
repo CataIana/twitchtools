@@ -120,7 +120,7 @@ class StreamStatus(commands.Cog):
                     else:
                         try: #Replace the applicable strings with past tense phrasing
                             embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]} for ~{human_timedelta(utcnow(), source=embed.timestamp)}"
+                            embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                             try:
                                 await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
                             except disnake.Forbidden: #In case something weird happens
@@ -140,7 +140,7 @@ class StreamStatus(commands.Cog):
         return False
 
     def is_live(self, channel_cache: dict, stream: Stream):
-        c = dict(channel_cache.get(stream.user.username))
+        c = dict(channel_cache.get(stream.user.username, {}))
         try:
             del c["alert_cooldown"]
         except KeyError:
