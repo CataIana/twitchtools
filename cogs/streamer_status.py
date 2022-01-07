@@ -172,7 +172,7 @@ class StreamStatus(commands.Cog):
         # Create embed message
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
-            description=f"Playing {stream.game} for {stream.view_count} viewers\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+            description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
             colour=8465372, timestamp=stream.started_at)
         embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}")
         embed.set_footer(text="Mew")
