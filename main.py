@@ -51,6 +51,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.load_extension(f"cogs.error_listener")
         self.load_extension(f"cogs.streamer_status")
         self.load_extension(f"cogs.queue_worker")
+        self.load_extension(f"cogs.guild_remove_cleanup")
         self.colour = disnake.Colour.from_rgb(128, 0, 128)
         self.emotes = Emotes
         with open("config/auth.json") as f:
