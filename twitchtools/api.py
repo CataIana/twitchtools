@@ -164,7 +164,8 @@ class http:
                 }, method="post")
 
         if response.status not in [202, 409]:
-            raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
+            m = await response.json()
+            raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Error: {m['status']} {m['error']}: {m['message']}")
         j = await response.json()
         json_data = j["data"][0]
         subscription = Subscription(**json_data)

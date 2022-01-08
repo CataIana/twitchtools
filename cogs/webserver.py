@@ -13,17 +13,17 @@ class RecieverWebServer:
     from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
-        self.port = 18272
+        self.port = 2096
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
 
-        self.allow_unverified_events: bool = True # TO BE USED ONLY FOR DEBUGGING PURPOSES
+        self.allow_unverified_events: bool = False # TO BE USED ONLY FOR DEBUGGING PURPOSES
 
     async def start(self):
         runner = web.AppRunner(self.web_server)
         await runner.setup()
-        await web.TCPSite(runner, host="localhost", port=self.port).start()
-        self.bot.log.info(f"Webserver running on localhost:{self.port}")
+        await web.TCPSite(runner, port=self.port).start()
+        self.bot.log.info(f"Webserver running on 0.0.0.0:{self.port}")
         return self.web_server
 
     async def _reciever(self, request: web.Request):
