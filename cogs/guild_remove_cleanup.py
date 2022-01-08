@@ -11,7 +11,12 @@ class CallbackCleanup(commands.Cog):
         super().__init__()
 
     @commands.Cog.listener()
+    async def on_guild_join(self, guild: Guild):
+        self.bot.log.info(f"Joined guild {guild.name} :)")
+
+    @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild):
+        self.bot.log.info(f"Left guild {guild.name} :(")
         callbacks = await self.get_callbacks()
         diff = False
         for streamer, callback_info in dict(callbacks).items():
