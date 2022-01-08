@@ -325,8 +325,9 @@ class RecieverCommands(commands.Cog):
         if alert_mode == 2 and status_channel is None:
             raise commands.BadArgument(f"Alert Mode 2 requires a status channel!")
 
-        if len(custom_live_message) > 300:
-            raise commands.UserInputError(f"No more than 300 characters allowed for custom live message")
+        if custom_live_message:
+            if len(custom_live_message) > 300:
+                raise commands.UserInputError(f"No more than 300 characters allowed for custom live message")
 
         #Checks done
 
