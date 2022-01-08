@@ -100,6 +100,7 @@ class StreamStatus(commands.Cog):
                     continue
                 except disnake.HTTPException:
                     continue
+
         
         # Delete live channel data after being used
         channel_cache[streamer.username].pop("live_channels", None)
@@ -119,10 +120,13 @@ class StreamStatus(commands.Cog):
                         continue
                     else:
                         try: #Replace the applicable strings with past tense phrasing
-                            embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
+                            embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url)
+                            #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
+                            extracted_game = embed.description.split('Playing ', 1)[1].split('\n')[0]
+                            embed.description = f"Was playing {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                             try:
-                                await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
+                                await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
+                                #await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
                             except disnake.Forbidden: #In case something weird happens
                                 continue
                         except IndexError: #In case something weird happens when parsing the embed values
@@ -173,9 +177,7 @@ class StreamStatus(commands.Cog):
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
             description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
-            colour=8465372, timestamp=stream.started_at)
-        embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}")
-        embed.set_footer(text="Mew")
+            colour=8465372, timestamp=stream.started_at).set_author(name=f"{stream.user.display_name} is now live on Twitch!").set_footer(text="Mew")
 
         #Permission overrides
         SelfOverride = disnake.PermissionOverwrite() # Make sure the bot has permission to access the channel
@@ -209,7 +211,7 @@ class StreamStatus(commands.Cog):
                 alert_channel = self.bot.get_channel(alert_channel_id)
                 if alert_channel is not None:
                     try:
-                        live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
+                        live_alert = await alert_channel.send(alert_info.get("custom_message", f"{stream.user.display_name} is live on Twitch!")+role_mention, embed=embed)
                         live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
                     except disnake.Forbidden:
                         pass
@@ -226,15 +228,15 @@ class StreamStatus(commands.Cog):
                     NewChannelOverrides[role] = OverrideRole
 
                 # Check if channel doesn't already exist. Kind of a bad idea, but does effectively prevent duplicate channels
-                if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
+                #if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
                     # Create temporary channel and add channel id to channel cache
-                    try:
-                        channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
-                        if channel is not None:
-                            await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
-                            live_channels.append(channel.id)
-                    except disnake.Forbidden:
-                        self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
+                try:
+                    channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
+                    if channel:
+                        await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
+                        live_channels.append(channel.id)
+                except disnake.Forbidden:
+                    self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
             
             # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
             elif alert_info["mode"] == 2:

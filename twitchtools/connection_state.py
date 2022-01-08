@@ -21,7 +21,7 @@ class CustomConnectionState(ConnectionState):
             elif interaction.data.component_type is ComponentType.select:
                 self.dispatch("dropdown", interaction)
         elif data["type"] == 4:
-            interaction = ApplicationCustomContext(data=data, state=self)
+            interaction = ApplicationCommandInteraction(data=data, state=self)
             self.dispatch("application_command_autocomplete", interaction)
         else:
             return

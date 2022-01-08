@@ -308,7 +308,8 @@ class RecieverCommands(commands.Cog):
                         }),
                         notification_channel: TextChannel,
                         alert_role: Role = None,
-                        status_channel: TextChannel = None
+                        status_channel: TextChannel = None,
+                        custom_live_message: str = None
         ):
         # Run checks on all the supplied arguments
         streamer = await self.check_streamer(username=streamer_username)
@@ -323,6 +324,9 @@ class RecieverCommands(commands.Cog):
         
         if alert_mode == 2 and status_channel is None:
             raise commands.BadArgument(f"Alert Mode 2 requires a status channel!")
+
+        if len(custom_live_message) > 300:
+            raise commands.UserInputError(f"No more than 300 characters allowed for custom live message")
 
         #Checks done
 
@@ -344,6 +348,8 @@ class RecieverCommands(commands.Cog):
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
         if alert_mode == 2:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
+        if custom_live_message:
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["custom_message"] = custom_live_message
 
         await self.write_callbacks(callbacks)
 
@@ -378,6 +384,8 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Alert Mode", value=alert_mode, inline=True)
         if alert_mode == 2:
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
+        if custom_live_message:
+            embed.add_field(name="Status Channel", value=custom_live_message, inline=False)
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="List all the active streamer alerts setup in this server")
@@ -510,18 +518,26 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Alert Role", value=alert_role, inline=True)
         await ctx.send(embed=embed)
 
+    async def streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+        callbacks = await ctx.application_command.cog.get_callbacks()
+        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
+
     @commands.slash_command()
     @commands.has_guild_permissions(administrator=True)
-    async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str):
+    async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamer_autocomplete)):
         """
         Remove live alerts for a streamer
         """
         await self.callback_deletion(ctx, streamer, config_file="callbacks.json", _type="status")
-        await ctx.send(f"{self.bot.emotes.success} Delete live alerts for {streamer}")
+        await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
+
+    async def streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+        callbacks = await ctx.application_command.cog.get_title_callbacks()
+        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
 
     @commands.slash_command()
     @commands.has_guild_permissions(administrator=True)
-    async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str):
+    async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamertitles_autocomplete)):
         """
         Remove title change alerts for a streamer
         """
@@ -596,7 +612,7 @@ class RecieverCommands(commands.Cog):
                 await self.bot.api.delete_subscription(data["subscription_id"])
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
-            self.bot.title_callbacks[streamer]["subscription_id"] = sub.id
+            title_callbacks[streamer]["subscription_id"] = sub.id
         self.write_title_callbacks(title_callbacks)
         await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
                 
