@@ -16,6 +16,7 @@ class RecieverWebServer:
         self.port = 2096
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
+        self.web_server.add_routes([web.route('*', '/', self._info)])
 
         self.allow_unverified_events: bool = False # TO BE USED ONLY FOR DEBUGGING PURPOSES
 
@@ -25,6 +26,9 @@ class RecieverWebServer:
         await web.TCPSite(runner, port=self.port).start()
         self.bot.log.info(f"Webserver running on 0.0.0.0:{self.port}")
         return self.web_server
+    
+    async def _info(self, request: web.Request):
+        return web.Response(status=200, text=f"Twitch Tools webserver running here")
 
     async def _reciever(self, request: web.Request):
         await self.bot.wait_until_ready()
