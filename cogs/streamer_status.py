@@ -142,7 +142,7 @@ class StreamStatus(commands.Cog):
         return False
 
     def is_live(self, channel_cache: dict, stream: Stream):
-        c = dict(channel_cache.get(stream.user.username))
+        c = dict(channel_cache.get(stream.user.username, {}))
         try:
             del c["alert_cooldown"]
         except KeyError:
