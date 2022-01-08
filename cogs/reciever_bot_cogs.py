@@ -136,7 +136,7 @@ class RecieverCommands(commands.Cog):
         else:
             owners = await self.bot.fetch_user(self.bot.owner_id)
             is_plural = False
-        callbacks = self.get_callbacks()
+        callbacks = await self.get_callbacks()
         alert_count = 0
         for data in callbacks.values():
             alert_count += len(data["alert_roles"].values())
