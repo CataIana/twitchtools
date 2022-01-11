@@ -386,7 +386,7 @@ class RecieverCommands(commands.Cog):
         if alert_mode == 2:
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
         if custom_live_message:
-            embed.add_field(name="Status Channel", value=custom_live_message, inline=False)
+            embed.add_field(name="Custom Alert Message", value=custom_live_message, inline=False)
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="List all the active streamer alerts setup in this server")
