@@ -361,7 +361,15 @@ class RecieverCommands(commands.Cog):
                 callbacks[streamer.username]["online_id"] = sub1.id
                 sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
                 callbacks[streamer.username]["offline_id"] = sub2.id
+                if title_phrase:
+                    sub3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callbacks[streamer.username]["secret"], _type="phrasecheck")
+                    callbacks[streamer.username]["title_id"] = sub3.id
             except SubscriptionError as e:
+                if title_phrase:
+                    try:
+                        await self.bot.api.delete_subscription(callbacks[streamer.username]["title_id"])
+                    except KeyError:
+                        pass
                 await self.callback_deletion(ctx, streamer.username, config_file="callbacks.json")
                 raise SubscriptionError(str(e))
 
@@ -559,6 +567,8 @@ class RecieverCommands(commands.Cog):
                 elif _type == "status":
                     await self.bot.api.delete_subscription(callbacks[streamer]['offline_id'])
                     await self.bot.api.delete_subscription(callbacks[streamer]['online_id'])
+                    if callbacks[streamer].get("title_id", None):
+                        await self.bot.api.delete_subscription(callbacks[streamer]['title_id'])
             except KeyError:
                 pass
             del callbacks[streamer]
@@ -569,7 +579,7 @@ class RecieverCommands(commands.Cog):
     @commands.is_owner()
     async def testcallback(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        #This is just a shitty quick implementation. The web server should always return a status code 400 since no streamer should ever be named _callbacktest
+        #This is just a shitty quick implementation. The web server should always return a status code 204 since no streamer should ever be named _callbacktest
         try:
             r = await self.bot.api._request(f"{self.bot.api.callback_url}/callback/_callbacktest", method="POST")
         except asyncio.TimeoutError:
@@ -597,6 +607,15 @@ class RecieverCommands(commands.Cog):
                 await self.bot.api.delete_subscription(data["offline_id"])
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
+
+
+            add_title = any([a for a in data["alert_roles"].values() if a.get("title_phrase", None) is not None])
+
+            if add_title:
+                if data.get("title_id", None) is not None:
+                    await self.bot.api.delete_subscription(data["title_id"])
+                rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="phrasecheck")
+                callbacks[streamer]["title_id"] = rj3.id
         await self.write_callbacks(callbacks)
 
         self.bot.log.info("Running title resubscribe")
@@ -608,7 +627,7 @@ class RecieverCommands(commands.Cog):
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
             title_callbacks[streamer]["subscription_id"] = sub.id
-        self.write_title_callbacks(title_callbacks)
+        await self.write_title_callbacks(title_callbacks)
         await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
                 
 

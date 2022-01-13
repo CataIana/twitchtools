@@ -1,6 +1,6 @@
 from __future__ import annotations
 from aiohttp import web
-from twitchtools.enums import AlertOrigin
+from twitchtools.enums import AlertOrigin, Languages
 from json.decoder import JSONDecodeError
 import hmac
 import hashlib
@@ -72,8 +72,12 @@ class RecieverWebServer:
         try:
             if callback_type == "titlecallback":
                 callbacks = await self.get_title_callbacks()
-            else:
+            elif callback_type == "callback":
                 callbacks = await self.get_callbacks()
+            elif callback_type == "phrasecheck":
+                callbacks = await self.get_callbacks()
+            else:
+                return web.Response(status=400)
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
@@ -117,12 +121,39 @@ class RecieverWebServer:
             if callback_type == "titlecallback":
                 self.bot.log.info(f"Title Change Notification for {channel}")
                 return await self.title_notification(channel, data)
-            else:
+            elif callback_type == "callback":
                 self.bot.log.info(f"Notification for {channel}")
                 return await self.notification(channel, data)
+            elif callback_type == "phrasecheck":
+                self.bot.log.info(f"Title Change Phrase Check Notification for {channel}")
+                return await self.title_phrase_notification(channel, data)
         else:
-            self.bot.log.info("Unknown mode")
+            self.bot.log.warning("Unknown mode")
         return web.Response(status=404)
+
+    async def title_phrase_notification(self, channel, data):
+        channel = data["event"].get("broadcaster_user_login", channel)
+        streamer = await self.bot.api.get_user(user_login=channel)
+        callbacks = await self.get_callbacks()
+        stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
+        if callbacks[streamer.username].get("title_id", None):
+            if stream:
+                self.bot.log.info(stream.title)
+                #Patch stream info due to it being outdated
+                stream.title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
+                stream.stream_title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
+                try:
+                    stream.language = Languages[data["event"]["language"].upper()]
+                except KeyError:
+                    stream.language = Languages.OTHER
+
+                stream.game = "<no game>" if data["event"]["category_name"] == "" else data["event"]["category_name"]
+                stream.game_name = stream.game
+                stream.game_id = data["event"]["category_id"]
+                self.bot.log.info(stream.title)
+                self.bot.queue.put_nowait(stream)
+
+        return web.Response(status=202)
 
     async def title_notification(self, channel, data):
         event = self.bot.api.get_event(data)

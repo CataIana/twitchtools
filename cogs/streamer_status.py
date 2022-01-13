@@ -124,7 +124,7 @@ class StreamStatus(commands.Cog):
                             embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]} for ~{human_timedelta(utcnow(), source=embed.timestamp)}"
                             try:
-                                await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
+                                await message.edit(content=f"{message.content.split(' is', 1)[0]} was live on Twitch", embed=embed)
                             except disnake.Forbidden: #In case something weird happens
                                 continue
                         except IndexError: #In case something weird happens when parsing the embed values
@@ -208,7 +208,10 @@ class StreamStatus(commands.Cog):
                 role_mention = ""
             else:
                 role = guild.get_role(alert_info["role_id"])
-                role_mention = f" {role.mention}"
+                if role:
+                    role_mention = f" {role.mention}"
+                else:
+                    role_mention = ""
 
 
             if not on_cooldown: # Send live alert if not on alert cooldown, and append channel id and message id to channel cache
@@ -256,10 +259,11 @@ class StreamStatus(commands.Cog):
                 else:
                     self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}")
         
-        #Finally, combine all data into channel cache, and update the file
-        channel_cache[stream.user.username] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
+        if live_channels != [] or live_alerts != []:
+            #Finally, combine all data into channel cache, and update the file
+            channel_cache[stream.user.username] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
 
-        await self.write_channel_cache(channel_cache)
+            await self.write_channel_cache(channel_cache)
 
     async def do_webhook(self, callbacks: dict, stream: Stream):
         if "webhook" in callbacks[stream.user.username].keys():
