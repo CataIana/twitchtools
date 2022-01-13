@@ -211,7 +211,8 @@ class StreamStatus(commands.Cog):
                 alert_channel = self.bot.get_channel(alert_channel_id)
                 if alert_channel is not None:
                     try:
-                        live_alert = await alert_channel.send(alert_info.get("custom_message", f"{stream.user.display_name} is live on Twitch!")+role_mention, embed=embed)
+                        user_escaped = stream.user.display_name.replace('_', '\_')
+                        live_alert = await alert_channel.send(alert_info.get("custom_message", f"{user_escaped} is live on Twitch!")+role_mention, embed=embed)
                         live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
                     except disnake.Forbidden:
                         pass
@@ -233,7 +234,8 @@ class StreamStatus(commands.Cog):
                 try:
                     channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
                     if channel:
-                        await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
+                        user_escaped = stream.user.display_name.replace('_', '\_')
+                        await channel.send(f"{user_escaped} is live! https://twitch.tv/{stream.user.name}")
                         live_channels.append(channel.id)
                 except disnake.Forbidden:
                     self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
