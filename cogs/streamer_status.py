@@ -14,6 +14,7 @@ class StreamStatus(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
+        self.footer_msg = "Mew" # I know you like to change the footer msg so I'll try to at least make it easier
 
     @commands.Cog.listener()
     async def on_title_change(self, event: TitleEvent):
@@ -47,16 +48,17 @@ class StreamStatus(commands.Cog):
             self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
             return
 
+        user = await self.bot.api.get_user(user_id=event.broadcaster.id)
         #Create embed for discord
-        embed = disnake.Embed(description=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=utcnow())
+        embed = disnake.Embed(url=f"https://twitch.tv/{event.broadcaster.username}", colour=0x812BDC, timestamp=utcnow())
         if event.title != old_title:
             embed.add_field(name="Old Title", value=old_title, inline=True)
             embed.add_field(name="New Title", value=event.title, inline=True)
         if event.game != old_game:
             embed.add_field(name="Old Game", value=old_game, inline=True)
             embed.add_field(name="New Game", value=event.game, inline=True)
-        embed.set_author(name=f"Stream Link", url=f"https://twitch.tv/{event.broadcaster.username}")
-        embed.set_footer(text="Mew")
+        embed.set_author(name=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}!", url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=user.avatar)
+        embed.set_footer(text=self.footer_msg)
 
         self.bot.log.info(f"Sending title update for {event.broadcaster.username}")
 
@@ -121,10 +123,13 @@ class StreamStatus(commands.Cog):
                         continue
                     else:
                         try: #Replace the applicable strings with past tense phrasing
-                            embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            embed.description = f"was playing {embed.description.split('Playing ', 1)[1].split(' for', 1)[0]} for ~{human_timedelta(utcnow(), source=embed.timestamp)}"
+                            embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
+                            #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
+                            extracted_game = embed.description.split('Playing ', 1)[1].split('\n')[0]
+                            embed.description = f"Was playing {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                             try:
-                                await message.edit(content=f"{message.content.split(' is', 1)[0]} was live on Twitch", embed=embed)
+                                await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
+                                #await message.edit(content=f"{message.content.split(' is', 1)[0]} was live on Twitch", embed=embed)
                             except disnake.Forbidden: #In case something weird happens
                                 continue
                         except IndexError: #In case something weird happens when parsing the embed values
@@ -172,12 +177,13 @@ class StreamStatus(commands.Cog):
         await self.do_webhook(callbacks, stream)
         
         # Create embed message
+        stream.user = await self.bot.api.get_user(user=stream.user)
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
-            description=f"Playing {stream.game} for {stream.view_count} viewers\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+            description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
             colour=8465372, timestamp=stream.started_at)
-        embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}")
-        embed.set_footer(text="Mew")
+        embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
+        embed.set_footer(text=self.footer_msg) # This got stuck when combined. Not sure why
 
         #Permission overrides
         SelfOverride = disnake.PermissionOverwrite() # Make sure the bot has permission to access the channel
@@ -219,7 +225,9 @@ class StreamStatus(commands.Cog):
                 alert_channel = self.bot.get_channel(alert_channel_id)
                 if alert_channel is not None:
                     try:
-                        live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
+                        #live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
+                        user_escaped = stream.user.display_name.replace('_', '\_')
+                        live_alert = await alert_channel.send(alert_info.get("custom_message", f"{user_escaped} is live on Twitch!")+role_mention, embed=embed)
                         live_alerts.append({"channel": live_alert.channel.id, "message": live_alert.id})
                     except disnake.Forbidden:
                         pass
@@ -241,7 +249,9 @@ class StreamStatus(commands.Cog):
                     try:
                         channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
                         if channel is not None:
-                            await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
+                            #await channel.send(f"{stream.user.display_name} is live! https://twitch.tv/{stream.user.name}")
+                            user_escaped = stream.user.display_name.replace('_', '\_')
+                            await channel.send(f"{user_escaped} is live! https://twitch.tv/{stream.user.name}")
                             live_channels.append(channel.id)
                     except disnake.Forbidden:
                         self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
