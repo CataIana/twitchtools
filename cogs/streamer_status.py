@@ -46,15 +46,16 @@ class StreamStatus(commands.Cog):
             self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
             return
 
+        user = await self.bot.api.get_user(user_id=event.broadcaster.id)
         #Create embed for discord
-        embed = disnake.Embed(description=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}", colour=0x812BDC, timestamp=utcnow())
+        embed = disnake.Embed(url=f"https://twitch.tv/{event.broadcaster.username}", colour=0x812BDC, timestamp=utcnow())
         if event.title != old_title:
             embed.add_field(name="Old Title", value=old_title, inline=True)
             embed.add_field(name="New Title", value=event.title, inline=True)
         if event.game != old_game:
             embed.add_field(name="Old Game", value=old_game, inline=True)
             embed.add_field(name="New Game", value=event.game, inline=True)
-        embed.set_author(name=f"Stream Link", url=f"https://twitch.tv/{event.broadcaster.username}")
+        embed.set_author(name=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}!", url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=user.avatar)
         embed.set_footer(text="Mew")
 
         self.bot.log.info(f"Sending title update for {event.broadcaster.username}")
