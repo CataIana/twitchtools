@@ -38,7 +38,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.log.setLevel(logging.INFO)
 
         shandler = logging.StreamHandler(sys.stdout)
-        shandler.setLevel(logging.INFO)
+        shandler.setLevel(self.log.level)
         shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 

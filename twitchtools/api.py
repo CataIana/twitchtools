@@ -99,8 +99,9 @@ class http:
         json_data = j["data"][0]
         return User(**json_data)
 
-    async def get_streams(self, user_ids=[], user_logins=[], origin: AlertOrigin = AlertOrigin.unavailable) -> List[Stream]:
+    async def get_streams(self, users: List[Union[User, PartialUser]] = [], user_ids: List[int] = [], user_logins: List[str] = [], origin: AlertOrigin = AlertOrigin.unavailable) -> List[Stream]:
         queries = []
+        queries += [f"user_id={user.id}" for user in users]
         queries += [f"user_id={id}" for id in user_ids]
         queries += [f"user_login={login}" for login in user_logins]
         streams = []

@@ -174,10 +174,13 @@ class StreamStatus(commands.Cog):
         await self.do_webhook(callbacks, stream)
         
         # Create embed message
+        stream.user = await self.bot.api.get_user(user=stream.user)
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
             description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
-            colour=8465372, timestamp=stream.started_at).set_author(name=f"{stream.user.display_name} is now live on Twitch!").set_footer(text="Mew")
+            colour=8465372, timestamp=stream.started_at)
+        embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
+        embed.set_footer(text="Mew")
 
         #Permission overrides
         SelfOverride = disnake.PermissionOverwrite() # Make sure the bot has permission to access the channel

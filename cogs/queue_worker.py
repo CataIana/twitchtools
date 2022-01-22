@@ -16,6 +16,7 @@ class QueueWorker(commands.Cog):
         self.worker.cancel()
 
     async def worker(self):
+        self.bot.log.debug("Queue Worker Started")
         while not self.bot.is_closed():
             item: Union[Stream, User, TitleEvent] = await self.bot.queue.get()
             self.bot.log.debug(f"Recieved event! {type(item).__name__}")
@@ -23,6 +24,7 @@ class QueueWorker(commands.Cog):
                 self.status_cog = self.bot.get_cog("StreamStatus")
                 if self.status_cog is None:
                     self.bot.critical("Unable to find status cog to dispatch events!")
+                    self.bot.queue.task_done()
             if isinstance(item, Stream): # Stream online
                 if self.status_cog:
                     await self.status_cog.on_streamer_online(item)
@@ -38,6 +40,7 @@ class QueueWorker(commands.Cog):
                     await self.status_cog.on_title_change(item)
                 self.bot.dispatch("title_change", item)
 
+            self.bot.log.debug(f"Finished task {type(item).__name__}")
             self.bot.queue.task_done()
 
 
