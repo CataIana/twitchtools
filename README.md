@@ -9,6 +9,7 @@ Also has a bad implementation of syncing bttv/ffz emotes to discord
 * Rename `config/exampleauth.json` to `config/auth.json` and fill in the required fields. You will need a twitch application, and a discord bot token
 * Install the required dependencies `sudo pip3 install -r requirements.txt` The requirements file downloads the beta version of discord.py, but should also work just fine with discord.py 1.7.3
 * The webserver runs on port `18271`, so ensure your reverse proxy forwards your callback to that port. You can change this if necessary in `webserver.py`
+* Upload the emotes in the emotes folder into a server the bot can access. Then put the emotes into the Emote enum in `main.py`
 * Finally, run the bot with `python3 main.py` and you should be good to go
 ### Ensure your bot has permissions to create slash commands!
 The below invite url will grant them, along with the required permissions. Make sure to replace <client_id> with your client id!
