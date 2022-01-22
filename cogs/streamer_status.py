@@ -121,7 +121,7 @@ class StreamStatus(commands.Cog):
                         continue
                     else:
                         try: #Replace the applicable strings with past tense phrasing
-                            embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url)
+                            embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             extracted_game = embed.description.split('Playing ', 1)[1].split('\n')[0]
                             embed.description = f"Was playing {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
