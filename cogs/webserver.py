@@ -13,7 +13,7 @@ class RecieverWebServer:
     from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
-        self.port = 2096
+        self.port = 80
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
         self.web_server.add_routes([web.route('*', '/', self._info)])
