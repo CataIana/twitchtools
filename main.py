@@ -32,6 +32,9 @@ class TwitchCallBackBot(commands.InteractionBot):
         intents.guilds = True
         super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
 
+        # You can set custom owners by filling in the owner_ids array with user IDs, just uncomment it and comment out the above line
+        #super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"), owner_ids=[])
+
         self.queue = Queue(maxsize=0)
 
         self.log: logging.Logger = logging.getLogger("TwitchTools")

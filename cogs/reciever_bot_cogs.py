@@ -70,6 +70,41 @@ class pretty_time:
         full = (', '.join(full[0:-1]) + " and " + ' '.join(full[-1:])) if len(full) > 1 else ', '.join(full)
         self.prettify = full
 
+from typing import Callable, TypeVar
+T = TypeVar("T")
+
+def has_guild_permissions(owner_override: bool = False, **perms: bool) -> Callable[[T], T]:
+    """Similar to :func:`.has_permissions`, but operates on guild wide
+    permissions instead of the current channel permissions.
+
+    If this check is called in a DM context, it will raise an
+    exception, :exc:`.NoPrivateMessage`.
+
+    .. versionadded:: 1.3
+    """
+
+    invalid = set(perms) - set(disnake.Permissions.VALID_FLAGS)
+    if invalid:
+        raise TypeError(f"Invalid permission(s): {', '.join(invalid)}")
+
+    async def predicate(ctx: ApplicationCustomContext) -> bool:
+        if not ctx.guild:
+            raise commands.NoPrivateMessage
+
+        if owner_override:
+            if await ctx.bot.is_owner(ctx.author):
+                return True
+
+        permissions = ctx.author.guild_permissions  # type: ignore
+        missing = [perm for perm, value in perms.items() if getattr(permissions, perm) != value]
+
+        if not missing:
+            return True
+
+        raise commands.MissingPermissions(missing)
+
+    return commands.check(predicate)
+
 class RecieverCommands(commands.Cog):
     from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks
     def __init__(self, bot):
@@ -299,7 +334,7 @@ class RecieverCommands(commands.Cog):
         raise commands.BotMissingPermissions(missing)
 
     @commands.slash_command(name="addstreamer", description="Add live alerts for the provided streamer")
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def addstreamer(self,
                         ctx: ApplicationCustomContext,
                         streamer_username: str,
@@ -400,7 +435,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="List all the active streamer alerts setup in this server")
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def liststreamers(self, ctx: ApplicationCustomContext):
         callbacks = await self.get_callbacks()
 
@@ -440,7 +475,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(uwu)
 
     @commands.slash_command(description="List all the active title change alerts setup in this server")
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def listtitlechanges(self, ctx: ApplicationCustomContext):
         title_callbacks = await self.get_title_callbacks()
         uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
@@ -478,7 +513,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(uwu)
 
     @commands.slash_command(description="Add title change alerts for the provided streamer")
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def addtitlechange(self,
                             ctx: ApplicationCustomContext,
                             streamer_username: str,
@@ -530,7 +565,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.slash_command()
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str):
         """
         Remove live alerts for a streamer
@@ -539,7 +574,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     @commands.slash_command()
-    @commands.has_guild_permissions(administrator=True)
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str):
         """
         Remove title change alerts for a streamer
