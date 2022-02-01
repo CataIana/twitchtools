@@ -300,18 +300,31 @@ class RecieverCommands(commands.Cog):
 
     @commands.slash_command(name="addstreamer", description="Add live alerts for the provided streamer")
     @commands.has_guild_permissions(administrator=True)
-    async def addstreamer(self,
-                        ctx: ApplicationCustomContext,
-                        streamer_username: str,
-                        alert_mode: commands.option_enum({
-                            "Mode 0 - Creates a temporary channel when the streamer is live": 0,
-                            "Mode 2 - Updates a persistent status channel when the streamer goes live and offline": 2
-                        }),
-                        notification_channel: TextChannel,
-                        alert_role: Role = None,
-                        status_channel: TextChannel = None,
-                        custom_live_message: str = None
-        ):
+    async def addstreamer_group(self, ctx: ApplicationCustomContext):
+        pass
+
+    @addstreamer_group.sub_command_group(name="mode")
+    async def addstreamer_sub_group(self, ctx: ApplicationCustomContext):
+        pass
+
+    @addstreamer_sub_group.sub_command(name="zero", description="Creates a temporary live channel when the streamer goes live")
+    async def addmode0(self, ctx: ApplicationCustomContext, streamer_username: str,
+                    notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        await self.addstreamer(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+
+    @addstreamer_sub_group.sub_command(name="one", description="Only sends a notification when the streamer goes live")
+    async def addmode1(self, ctx: ApplicationCustomContext, streamer_username: str,
+                    notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        await self.addstreamer(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_channel=custom_live_message, mode=1)
+
+    @addstreamer_sub_group.sub_command(name="two", description="Updates a persistent status channel when the streamer goes live and offline")
+    async def addmode2(self, ctx: ApplicationCustomContext, streamer_username: str,
+                    notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        await self.addstreamer(ctx, streamer_username, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+        
+    async def addstreamer(self, ctx: ApplicationCustomContext, streamer_username: str,
+                        notification_channel: TextChannel, mode: int, alert_role: Role = None, 
+                        status_channel: TextChannel = None, custom_live_message: str = None):
         # Run checks on all the supplied arguments
         streamer = await self.check_streamer(username=streamer_username)
         if not streamer:
@@ -322,9 +335,6 @@ class RecieverCommands(commands.Cog):
 
         if isinstance(notification_channel, int): notification_channel = self.bot.get_channel(notification_channel)
         if isinstance(status_channel, int): status_channel = self.bot.get_channel(status_channel)
-        
-        if alert_mode == 2 and status_channel is None:
-            raise commands.BadArgument(f"Alert Mode 2 requires a status channel!")
 
         if custom_live_message:
             if len(custom_live_message) > 300:
@@ -353,14 +363,14 @@ class RecieverCommands(commands.Cog):
             make_subscriptions = True
             callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
 
-        callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": alert_mode, "notif_channel_id": notification_channel.id}
+        callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": mode, "notif_channel_id": notification_channel.id}
         if alert_role == None:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif alert_role == ctx.guild.default_role:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
-        if alert_mode == 2:
+        if mode == 2:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
         if custom_live_message:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["custom_message"] = custom_live_message
@@ -395,9 +405,10 @@ class RecieverCommands(commands.Cog):
         embed = Embed(title="Successfully added new streamer", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
         embed.add_field(name="Notification Channel", value=notification_channel.mention, inline=True)
-        embed.add_field(name="Alert Role", value=alert_role, inline=True)
-        embed.add_field(name="Alert Mode", value=alert_mode, inline=True)
-        if alert_mode == 2:
+        if alert_role:
+            embed.add_field(name="Alert Role", value=alert_role, inline=True)
+        embed.add_field(name="Alert Mode", value=mode, inline=True)
+        if mode == 2:
             embed.add_field(name="Status Channel", value=status_channel.mention, inline=True)
         if custom_live_message:
             embed.add_field(name="Custom Alert Message", value=custom_live_message, inline=False)

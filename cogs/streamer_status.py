@@ -243,6 +243,9 @@ class StreamStatus(commands.Cog):
                         live_channels.append(channel.id)
                 except disnake.Forbidden:
                     self.bot.log.warning(f"Permission error creating text channels in guild {guild.name}! ({stream.user.username})")
+
+            elif alert_info["mode"] == 1: # Notification is already sent, nothing needed to be done
+                pass
             
             # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
             elif alert_info["mode"] == 2:
