@@ -1,5 +1,5 @@
 import disnake
-from disnake import Embed, OptionType, OptionChoice, TextChannel, Role
+from disnake import Embed, TextChannel, Role
 from disnake.ext import commands, tasks
 from disnake.utils import utcnow
 import json
@@ -17,7 +17,8 @@ import psutil
 from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
-from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin
+from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin, Confirm
+from twitchtools import TextPaginator
 from twitchtools.exceptions import SubscriptionError
 from typing import Union
 from types import CoroutineType
@@ -70,7 +71,7 @@ class pretty_time:
         self.prettify = full
 
 class RecieverCommands(commands.Cog):
-    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks
+    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
@@ -333,6 +334,18 @@ class RecieverCommands(commands.Cog):
 
         #Create file structure and subscriptions if necessary
         callbacks = await self.get_callbacks()
+        if callbacks.get(streamer.username, {}).get("alert_roles", {}).get(str(ctx.guild.id), None):
+            view = Confirm(ctx)
+            await ctx.response.send_message(f"{streamer.username} is already setup for this server! Do you want to override the current settings?", view=view)
+            await view.wait()
+            if view.value == False or view.value == None:
+                for button in view.children:
+                    button.disabled = True
+                return await view.interaction.response.edit_message(content=f"Aborting override", view=view)
+            else:
+                for button in view.children:
+                    button.disabled = True
+                await view.interaction.response.edit_message(view=view)
         
         
         make_subscriptions = False
@@ -355,7 +368,8 @@ class RecieverCommands(commands.Cog):
         await self.write_callbacks(callbacks)
 
         if make_subscriptions:
-            await ctx.response.defer()
+            if not ctx.response.is_done():
+                await ctx.response.defer()
             try:
                 sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
                 callbacks[streamer.username]["online_id"] = sub1.id
@@ -394,10 +408,16 @@ class RecieverCommands(commands.Cog):
     async def liststreamers(self, ctx: ApplicationCustomContext):
         callbacks = await self.get_callbacks()
 
-        uwu = f"```nim\n{'Channel':15s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode \n"
-        for x, y in callbacks.items():
-            if str(ctx.guild.id) in y["alert_roles"].keys():
-                info = y["alert_roles"][str(ctx.guild.id)]
+        if len(callbacks) == 0:
+            return await ctx.send(f"{self.bot.emotes.error} No streamers configured for this server!")
+
+        cache = await self.get_channel_cache()
+
+        pages = []
+        page = [f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
+        for streamer, alert_info in dict(sorted(callbacks.items(), key=lambda x: x[0])).items():
+            if str(ctx.guild.id) in alert_info["alert_roles"].keys():
+                info = alert_info["alert_roles"][str(ctx.guild.id)]
                 alert_role = info.get("role_id", None)
                 if alert_role is None:
                     alert_role = "<No Alert Role>"
@@ -421,22 +441,40 @@ class RecieverCommands(commands.Cog):
                 else:
                     channel_override = ""
 
-                if len(uwu + f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n") > 1800:
-                    uwu += "```"
-                    await ctx.send(uwu)
-                    uwu = "```nim\n"
-                uwu += f"{x:15s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}\n"
-        uwu += "```"
-        await ctx.send(uwu)
+                last_live = cache.get(streamer, {}).get("alert_cooldown", "Unknown")
+                if type(last_live) == int:
+                    last_live = datetime.utcfromtimestamp(last_live).strftime("%d-%m-%y %H:%M")
+
+                page.append(f"{streamer:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                if len(page) == 9:
+                    if pages == []:
+                        pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
+                    else:
+                        pages.append('\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
+                    page = []
+
+        if page != []:
+            page = page[:-1] + [page[-1] + "```"]
+            if pages == []:
+                pages.append('\n'.join(page))
+            else:
+                pages.append('\n'.join(["```nim\n"] + page))
+        view = TextPaginator(ctx, pages, show_delete=True)
+        await ctx.send(content=view.pages[0], view=view)
 
     @commands.slash_command(description="List all the active title change alerts setup in this server")
     @commands.has_guild_permissions(administrator=True)
     async def listtitlechanges(self, ctx: ApplicationCustomContext):
         title_callbacks = await self.get_title_callbacks()
-        uwu = f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}\n"
-        for x, y in title_callbacks.items():
-            if str(ctx.guild.id) in y["alert_roles"].keys():
-                info = y["alert_roles"][str(ctx.guild.id)]
+
+        if len(title_callbacks) == 0:
+            return await ctx.send(f"{self.bot.emotes.error} No title changes configured for this server!")
+
+        pages = []
+        page = [f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}"]
+        for streamer, alert_info in dict(sorted(title_callbacks.items(), key=lambda x: x[0])).items():
+            if str(ctx.guild.id) in alert_info["alert_roles"].keys():
+                info = alert_info["alert_roles"][str(ctx.guild.id)]
                 alert_role = info.get("role_id", "")
                 if alert_role is None:
                     alert_role = "<No Alert Role>"
@@ -459,13 +497,21 @@ class RecieverCommands(commands.Cog):
                 else:
                     alert_channel = ""
 
-                if len(uwu + f"{x:15s} {alert_role:35s} {alert_channel:18s}\n") > 1800:
-                    uwu += "```"
-                    await ctx.send(uwu)
-                    uwu = "```nim\n"
-                uwu += f"{x:15s} {alert_role:35s} {alert_channel:18s}\n"
-        uwu += "```"
-        await ctx.send(uwu)
+                page.append(f"{streamer:15s} {alert_role:35s} {alert_channel:18s}")
+                if len(page) == 9:
+                    if pages == []:
+                        pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
+                    else:
+                        pages.append('\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
+                    page = []
+
+        if page != []:
+            if pages == []:
+                pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
+            else:
+                pages.append('\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
+        view = TextPaginator(ctx, pages, show_delete=True)
+        await ctx.send(content=view.pages[0], view=view)
 
     @commands.slash_command(description="Add title change alerts for the provided streamer")
     @commands.has_guild_permissions(administrator=True)
