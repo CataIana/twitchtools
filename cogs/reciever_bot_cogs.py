@@ -573,7 +573,7 @@ class RecieverCommands(commands.Cog):
         """
         Remove live alerts for a streamer
         """
-        await self.callback_deletion(ctx, streamer, config_file="callbacks.json", _type="status")
+        await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     @commands.slash_command()
@@ -582,7 +582,7 @@ class RecieverCommands(commands.Cog):
         """
         Remove title change alerts for a streamer
         """
-        await self.callback_deletion(ctx, streamer, config_file="title_callbacks.json", _type="title")
+        await self.callback_deletion(ctx, streamer.lower(), config_file="title_callbacks.json", _type="title")
         await ctx.send(f"{self.bot.emotes.success} Deleted title change alert for {streamer}")
 
     async def callback_deletion(self, ctx: ApplicationCustomContext, streamer, config_file, _type="status"):
