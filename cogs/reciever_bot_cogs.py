@@ -137,6 +137,7 @@ class RecieverCommands(commands.Cog):
             self.bot.log.info(f"Attemped to run invalid slash command!")
 
     @commands.slash_command(description="Responds with the bots latency to discords servers")
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def ping(self, ctx: ApplicationCustomContext):
         gateway = int(self.bot.latency*1000)
         await ctx.send(f"Pong! `{gateway}ms` Gateway") #Message cannot be ephemeral for ping updates to show
@@ -160,6 +161,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
 
     @commands.slash_command(description="Get various bot information such as memory usage and version")
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def botstatus(self, ctx: ApplicationCustomContext):
         p = pretty_time(self.bot._uptime)
         embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
@@ -187,6 +189,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="Get how long the bot has been running")
+    @has_guild_permissions(owner_override=True, manage_guild=True)
     async def uptime(self, ctx: ApplicationCustomContext):
         epoch = time() - self.bot._uptime
         conv = {
