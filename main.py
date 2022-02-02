@@ -26,10 +26,13 @@ class Emotes(Enum):
         return self._value_
 
 class TwitchCallBackBot(commands.InteractionBot):
+    from twitchtools import _sync_application_commands
+
     def __init__(self):
         intents = disnake.Intents.none()
         intents.guilds = True
         super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
+        self._sync_commands_debug = True
 
         self.queue = Queue(maxsize=0)
 

@@ -10,3 +10,4 @@ from .files import *
 from .timedelta import human_timedelta
 from .custom_context import ApplicationCustomContext
 from .connection_state import CustomConnectionState
+from .custom_sync import _sync_application_commands
