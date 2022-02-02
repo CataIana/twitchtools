@@ -1,11 +1,11 @@
 from disnake import Guild
 from disnake.ext import commands
+from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
 class CallbackCleanup(commands.Cog):
-    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
@@ -17,7 +17,7 @@ class CallbackCleanup(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild):
         self.bot.log.info(f"Left guild {guild.name} :(")
-        callbacks = await self.get_callbacks()
+        callbacks = await get_callbacks()
         diff = False
         for streamer, callback_info in dict(callbacks).items():
             if str(guild.id) in callback_info["alert_roles"].keys():
@@ -32,9 +32,9 @@ class CallbackCleanup(commands.Cog):
                 except KeyError: # Idk if it somehow errors lol, just ignore
                     continue
         if diff:
-            await self.write_callbacks(callbacks)
+            await write_callbacks(callbacks)
 
-        title_callbacks = await self.get_title_callbacks()
+        title_callbacks = await get_title_callbacks()
         tdiff = False
         for streamer, callback_info in dict(title_callbacks).items():
             if str(guild.id) in callback_info["alert_roles"].keys():
@@ -48,7 +48,7 @@ class CallbackCleanup(commands.Cog):
                 except KeyError: # Idk if it somehow errors lol, just ignore
                     continue
         if tdiff:
-            await self.write_title_callbacks(callbacks)
+            await write_title_callbacks(callbacks)
 
 
 def setup(bot):

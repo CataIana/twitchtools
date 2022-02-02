@@ -1,6 +1,7 @@
 from __future__ import annotations
 from aiohttp import web
 from twitchtools.enums import AlertOrigin
+from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
 from json.decoder import JSONDecodeError
 import hmac
 import hashlib
@@ -10,7 +11,6 @@ if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
 class RecieverWebServer:
-    from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         self.port = 18271
@@ -38,7 +38,7 @@ class RecieverWebServer:
     async def verify_request(self, request: web.Request, secret: str):
         if self.allow_unverified_requests:
             return True
-        notif_cache = await self.get_notif_cache()
+        notif_cache = await get_notif_cache()
 
         try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
@@ -58,7 +58,7 @@ class RecieverWebServer:
         if signature != expected_signature:
             return False
         notif_cache.append(message_id)
-        await self.write_notif_cache(notif_cache)
+        await write_notif_cache(notif_cache)
         return True
             
 
@@ -67,9 +67,9 @@ class RecieverWebServer:
             return web.Response(status=204)
         try:
             if callback_type == "titlecallback":
-                callbacks = await self.get_title_callbacks()
+                callbacks = await get_title_callbacks()
             else:
-                callbacks = await self.get_callbacks()
+                callbacks = await get_callbacks()
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return

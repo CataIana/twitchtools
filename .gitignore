@@ -3,6 +3,7 @@ auth.json
 emote_sync.json
 callbacks.json
 title_callbacks.json
+manager_roles.json
 cache/*
 *.log
 *.backup

@@ -9,7 +9,7 @@ from time import time
 import logging
 import json
 import sys
-from twitchtools import PartialUser, AlertOrigin
+from twitchtools import PartialUser, AlertOrigin, get_callbacks
 from twitchtools.connection_state import CustomConnectionState
 from typing import TypeVar, Type, Any
 from enum import Enum
@@ -26,7 +26,6 @@ class Emotes(Enum):
         return self._value_
 
 class TwitchCallBackBot(commands.InteractionBot):
-    from twitchtools.files import get_callbacks
     def __init__(self):
         intents = disnake.Intents.none()
         intents.guilds = True
@@ -91,7 +90,7 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        callbacks = await self.get_callbacks() #Get callback dict
+        callbacks = await get_callbacks() #Get callback dict
         if not callbacks:
             return
         streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()], origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones

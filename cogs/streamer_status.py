@@ -2,6 +2,7 @@ import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
 from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta
+from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache
 from time import time
 
 
@@ -10,17 +11,16 @@ if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
 class StreamStatus(commands.Cog):
-    from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
 
     async def on_title_change(self, event: TitleEvent):
         await self.bot.wait_until_ready()
-        title_callbacks = await self.get_title_callbacks()
+        title_callbacks = await get_title_callbacks()
         if not title_callbacks:
             return
-        title_cache = await self.get_title_cache()
+        title_cache = await get_title_cache()
         old_title = title_cache.get(event.broadcaster.username, {}).get("cached_title", "<no title>") #Get cached information for streamer, or none
         old_game = title_cache.get(event.broadcaster.username, {}).get("cached_game", "<no game>")
 
@@ -39,7 +39,7 @@ class StreamStatus(commands.Cog):
             "cached_game": event.game,
         }
 
-        await self.write_title_cache(title_cache)
+        await write_title_cache(title_cache)
 
         stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
@@ -79,8 +79,8 @@ class StreamStatus(commands.Cog):
 
     async def on_streamer_offline(self, streamer: User):
         await self.bot.wait_until_ready()
-        channel_cache = await self.get_channel_cache()
-        callbacks = await self.get_callbacks()
+        channel_cache = await get_channel_cache()
+        callbacks = await get_callbacks()
         if not callbacks:
             return
         # Check if there's anything to even be done, if not, just return
@@ -137,7 +137,7 @@ class StreamStatus(commands.Cog):
         channel_cache[streamer.username].pop("live_alerts", None)
 
         # Update cache
-        await self.write_channel_cache(channel_cache)
+        await write_channel_cache(channel_cache)
 
     def on_cooldown(self, alert_cooldown: int) -> bool:
         if int(time()) - alert_cooldown < 600:
@@ -156,8 +156,8 @@ class StreamStatus(commands.Cog):
 
     async def on_streamer_online(self, stream: Stream):
         await self.bot.wait_until_ready()
-        channel_cache = await self.get_channel_cache()
-        callbacks = await self.get_callbacks()
+        channel_cache = await get_channel_cache()
+        callbacks = await get_callbacks()
         on_cooldown = self.on_cooldown(channel_cache.get(stream.user.username, {}).get("alert_cooldown", 0))
 
         # Do not re-run this function is the streamer is already live
@@ -262,7 +262,7 @@ class StreamStatus(commands.Cog):
         #Finally, combine all data into channel cache, and update the file
         channel_cache[stream.user.username] = {"alert_cooldown": int(time()), "live_channels": live_channels, "live_alerts": live_alerts}
 
-        await self.write_channel_cache(channel_cache)
+        await write_channel_cache(channel_cache)
 
     async def do_webhook(self, callbacks: dict, stream: Stream):
         if "webhook" in callbacks[stream.user.username].keys():

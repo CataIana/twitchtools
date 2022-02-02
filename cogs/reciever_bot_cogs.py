@@ -18,60 +18,48 @@ from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin, Confirm
-from twitchtools import TextPaginator
+from twitchtools import TextPaginator, human_timedelta, get_manager_role, write_manager_role, get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache
 from twitchtools.exceptions import SubscriptionError
-from typing import Union
+from typing import Union, Callable, TypeVar
 from types import CoroutineType
 from collections.abc import Mapping
 from collections import deque
 
 
-class TimezoneOptions(Enum):
-    short_date = "d" #07/10/2021
-    month_day_year_time = "f" #July 10, 2021 1:21 PM
-    time = "t" #1:21 PM
-    short_date2 = "D" #July 10, 2021
-    full_date_time = "F" #Saturday, July 10, 2021 1:21 PM
-    long_ago = "R" #6 minutes ago
+class TimestampOptions(Enum):
+    short_time = "t" #1:21 PM
     long_time = "T" #1:21:08 PM
+    short_date = "d" #07/10/2021
+    long_date = "D" #July 10, 2021
+    long_date_short_time = "f" #July 10, 2021 1:21 PM
+    long_date_with_day_of_week_and_short_time = "F" #Saturday, July 10, 2021 1:21 PM
+    relative = "R" #6 minutes ago
 
-def DiscordTimezone(utc, format: TimezoneOptions):
+def DiscordTimezone(utc, format: TimestampOptions):
     return f"<t:{int(utc)}:{format.value}>"
 
-class pretty_time:
-    def __init__(self, unix, duration=False):
-        unix = float(unix)
-        if not duration:
-            self.unix_diff = time() - unix
-        else:
-            self.unix_diff = unix
-        self.unix = unix
-        self.years = int(str(self.unix_diff // 31536000).split('.')[0])
-        self.days = int(str(self.unix_diff // 86400 % 365).split('.')[0])
-        self.hours = int(str(self.unix_diff // 3600 % 24).split('.')[0])
-        self.minutes = int(str(self.unix_diff // 60 % 60).split('.')[0])
-        self.seconds = int(str(self.unix_diff % 60).split('.')[0])
-        timezone_datetime = datetime.fromtimestamp(unix)
-        self.datetime = timezone_datetime.strftime('%I:%M:%S %p %Y-%m-%d %Z')
+T = TypeVar("T")
+def has_manage_permissions() -> Callable[[T], T]:
+    async def predicate(ctx: ApplicationCustomContext) -> bool:
+        if not ctx.guild:
+            raise commands.NoPrivateMessage
 
-        self.dict = {"days": self.days, "hours": self.hours, "minutes": self.minutes, "seconds": self.seconds, "datetime": self.datetime}
+        # Bot owner override all permissions
+        if await ctx.bot.is_owner(ctx.author):
+            return True
 
-        full = []
-        if self.years != 0:
-            full.append(f"{self.years} {'year' if self.years == 1 else 'years'}")
-        if self.days != 0:
-            full.append(f"{self.days} {'day' if self.days == 1 else 'days'}")
-        if self.hours != 0:
-            full.append(f"{self.hours} {'hour' if self.hours == 1 else 'hours'}")
-        if self.minutes != 0:
-            full.append(f"{self.minutes} {'minute' if self.minutes == 1 else 'minutes'}")
-        if self.seconds != 0:
-            full.append(f"{self.seconds} {'second' if self.seconds == 1 else 'seconds'}")
-        full = (', '.join(full[0:-1]) + " and " + ' '.join(full[-1:])) if len(full) > 1 else ', '.join(full)
-        self.prettify = full
+        if ctx.author.guild_permissions.administrator:
+            return True
+
+        manager_role_id = await get_manager_role(ctx.guild)
+        manager_role = ctx.guild.get_role(manager_role_id)
+        if manager_role:
+            if manager_role in ctx.author.roles:
+                return True
+
+    return commands.check(predicate)
 
 class RecieverCommands(commands.Cog):
-    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
@@ -102,6 +90,7 @@ class RecieverCommands(commands.Cog):
             self.bot.log.info(f"Attemped to run invalid slash command!")
 
     @commands.slash_command(description="Responds with the bots latency to discords servers")
+    @has_manage_permissions()
     async def ping(self, ctx: ApplicationCustomContext):
         gateway = int(self.bot.latency*1000)
         await ctx.send(f"Pong! `{gateway}ms` Gateway") #Message cannot be ephemeral for ping updates to show
@@ -125,8 +114,8 @@ class RecieverCommands(commands.Cog):
         await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
 
     @commands.slash_command(description="Get various bot information such as memory usage and version")
+    @has_manage_permissions()
     async def botstatus(self, ctx: ApplicationCustomContext):
-        p = pretty_time(self.bot._uptime)
         embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
         if self.bot.owner_id is None:
             owner_objs = [str(self.bot.get_user(user)) for user in self.bot.owner_ids]
@@ -137,11 +126,11 @@ class RecieverCommands(commands.Cog):
         else:
             owners = await self.bot.fetch_user(self.bot.owner_id)
             is_plural = False
-        callbacks = await self.get_callbacks()
+        callbacks = await get_callbacks()
         alert_count = 0
         for data in callbacks.values():
             alert_count += len(data["alert_roles"].values())
-        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {p.prettify}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
+        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimestampOptions.long_date_short_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
         memory = psutil.virtual_memory()
         cpu_freq = psutil.cpu_freq()
@@ -149,23 +138,6 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
         embed.set_footer(text=f"Client ID: {self.bot.user.id}")
-        await ctx.send(embed=embed)
-
-    @commands.slash_command(description="Get how long the bot has been running")
-    async def uptime(self, ctx: ApplicationCustomContext):
-        epoch = time() - self.bot._uptime
-        conv = {
-            "days": str(epoch // 86400).split('.')[0],
-            "hours": str(epoch // 3600 % 24).split('.')[0],
-            "minutes": str(epoch // 60 % 60).split('.')[0],
-            "seconds": str(epoch % 60).split('.')[0],
-            "full": strftime('%Y-%m-%d %I:%M:%S %p %Z', localtime(self.bot._uptime))
-        }
-        description = f"{conv['days']} {'day' if conv['days'] == '1' else 'days'}, {conv['hours']} {'hour' if conv['hours'] == '1' else 'hours'}, {conv['minutes']} {'minute' if conv['minutes'] == '1' else 'minutes'} and {conv['seconds']} {'second' if conv['seconds'] == '1' else 'seconds'}"
-        embed = Embed(title="Uptime", description=description,
-                            color=self.bot.colour, timestamp=datetime.utcnow())
-        embed.set_footer(
-            text=f"ID: {ctx.guild.id} | Bot started at {conv['full']}")
         await ctx.send(embed=embed)
 
     async def aeval(self, ctx: ApplicationCustomContext, code):
@@ -280,6 +252,33 @@ class RecieverCommands(commands.Cog):
                     except disnake.errors.NotFound:
                         pass
 
+    @commands.slash_command(name="managerrole")
+    @commands.has_guild_permissions(administrator=True)
+    async def manager_role(self, ctx: ApplicationCustomContext):
+        pass
+
+    @manager_role.sub_command(name="get", description="Get what role is set as the manager role")
+    async def manager_get(self, ctx: ApplicationCustomContext):
+        role_id = await get_manager_role(ctx.guild)
+        if not role_id:
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
+        await ctx.send(f"The manager role for **{ctx.guild.name}** is **{role.name}**", ephemeral=True)
+
+    @manager_role.sub_command(name="set", description="Define a manager role that allows a role to use the bot commands")
+    async def manager_set(self, ctx: ApplicationCustomContext, role: Role):
+        await write_manager_role(ctx.guild, role=role)
+        await ctx.send(f"Set the manager role for **{ctx.guild.name}** to **{role.name}**")
+
+    @manager_role.sub_command(name="remove", description="Remove the manager role if it has been set")
+    async def manager_remove(self, ctx: ApplicationCustomContext):
+        if not await get_manager_role(ctx.guild):
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
+        await write_manager_role(ctx.guild, role=None)
+        await ctx.send(f"Removed the manager role for **{ctx.guild.name}**")
+
     async def check_streamer(self, username) -> User:
         return await self.bot.api.get_user(user_login=username)
 
@@ -299,7 +298,7 @@ class RecieverCommands(commands.Cog):
         raise commands.BotMissingPermissions(missing)
 
     @commands.slash_command(name="addstreamer", description="Add live alerts for the provided streamer")
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def addstreamer_group(self, ctx: ApplicationCustomContext):
         pass
 
@@ -343,7 +342,7 @@ class RecieverCommands(commands.Cog):
         #Checks done
 
         #Create file structure and subscriptions if necessary
-        callbacks = await self.get_callbacks()
+        callbacks = await get_callbacks()
         if callbacks.get(streamer.username, {}).get("alert_roles", {}).get(str(ctx.guild.id), None):
             view = Confirm(ctx)
             await ctx.response.send_message(f"{streamer.username} is already setup for this server! Do you want to override the current settings?", view=view)
@@ -375,7 +374,7 @@ class RecieverCommands(commands.Cog):
         if custom_live_message:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["custom_message"] = custom_live_message
 
-        await self.write_callbacks(callbacks)
+        await write_callbacks(callbacks)
 
         if make_subscriptions:
             if not ctx.response.is_done():
@@ -389,7 +388,7 @@ class RecieverCommands(commands.Cog):
                 await self.callback_deletion(ctx, streamer.username, config_file="callbacks.json")
                 raise SubscriptionError(str(e))
 
-        await self.write_callbacks(callbacks)
+        await write_callbacks(callbacks)
 
         #Run catchup on streamer immediately
         stream_status = await self.bot.api.get_stream(streamer.username, origin=AlertOrigin.catchup)
@@ -415,14 +414,14 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="List all the active streamer alerts setup in this server")
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def liststreamers(self, ctx: ApplicationCustomContext):
-        callbacks = await self.get_callbacks()
+        callbacks = await get_callbacks()
 
         if len(callbacks) == 0:
             return await ctx.send(f"{self.bot.emotes.error} No streamers configured for this server!")
 
-        cache = await self.get_channel_cache()
+        cache = await get_channel_cache()
 
         pages = []
         page = [f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
@@ -457,7 +456,7 @@ class RecieverCommands(commands.Cog):
                     last_live = datetime.utcfromtimestamp(last_live).strftime("%d-%m-%y %H:%M")
 
                 page.append(f"{streamer:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
-                if len(page) == 9:
+                if len(page) == 14:
                     if pages == []:
                         pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
                     else:
@@ -474,9 +473,9 @@ class RecieverCommands(commands.Cog):
         await ctx.send(content=view.pages[0], view=view)
 
     @commands.slash_command(description="List all the active title change alerts setup in this server")
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def listtitlechanges(self, ctx: ApplicationCustomContext):
-        title_callbacks = await self.get_title_callbacks()
+        title_callbacks = await get_title_callbacks()
 
         if len(title_callbacks) == 0:
             return await ctx.send(f"{self.bot.emotes.error} No title changes configured for this server!")
@@ -509,7 +508,7 @@ class RecieverCommands(commands.Cog):
                     alert_channel = ""
 
                 page.append(f"{streamer:15s} {alert_role:35s} {alert_channel:18s}")
-                if len(page) == 9:
+                if len(page) == 14:
                     if pages == []:
                         pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
                     else:
@@ -525,7 +524,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(content=view.pages[0], view=view)
 
     @commands.slash_command(description="Add title change alerts for the provided streamer")
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def addtitlechange(self,
                             ctx: ApplicationCustomContext,
                             streamer_username: str,
@@ -542,7 +541,7 @@ class RecieverCommands(commands.Cog):
         if isinstance(notification_channel, int): notification_channel = self.bot.get_channel(notification_channel)
 
         #Create file structure and subscriptions if necessary
-        title_callbacks = await self.get_title_callbacks()
+        title_callbacks = await get_title_callbacks()
         
         make_subscriptions = False
         if streamer.username not in title_callbacks.keys():
@@ -557,7 +556,7 @@ class RecieverCommands(commands.Cog):
         else:
             title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
 
-        await self.write_title_callbacks(title_callbacks)
+        await write_title_callbacks(title_callbacks)
 
         if make_subscriptions:
             await ctx.response.defer()
@@ -568,7 +567,7 @@ class RecieverCommands(commands.Cog):
                 raise SubscriptionError(str(e))
             title_callbacks[streamer.username]["subscription_id"] = sub.id
 
-        await self.write_title_callbacks(title_callbacks)
+        await write_title_callbacks(title_callbacks)
 
         embed = Embed(title="Successfully added new title change alert", color=self.bot.colour)
         embed.add_field(name="Streamer", value=streamer.username, inline=True)
@@ -581,7 +580,7 @@ class RecieverCommands(commands.Cog):
         return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
 
     @commands.slash_command()
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamer_autocomplete)):
         """
         Remove live alerts for a streamer
@@ -594,7 +593,7 @@ class RecieverCommands(commands.Cog):
         return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
 
     @commands.slash_command()
-    @commands.has_guild_permissions(administrator=True)
+    @has_manage_permissions()
     async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamertitles_autocomplete)):
         """
         Remove title change alerts for a streamer
@@ -648,7 +647,7 @@ class RecieverCommands(commands.Cog):
     async def resubscribe(self, ctx: ApplicationCustomContext):
         self.bot.log.info("Running live alert resubscribe")
         await ctx.response.defer()
-        callbacks = await self.get_callbacks()
+        callbacks = await get_callbacks()
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
             if data.get("online_id", None) is not None:
@@ -660,10 +659,10 @@ class RecieverCommands(commands.Cog):
                 await self.bot.api.delete_subscription(data["offline_id"])
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
-        await self.write_callbacks(callbacks)
+        await write_callbacks(callbacks)
 
         self.bot.log.info("Running title resubscribe")
-        title_callbacks = await self.get_title_callbacks()
+        title_callbacks = await get_title_callbacks()
         for streamer, data in title_callbacks.items():
             await asyncio.sleep(0.2)
             if data.get("subscription_id", None) is not None:
@@ -671,7 +670,7 @@ class RecieverCommands(commands.Cog):
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
             title_callbacks[streamer]["subscription_id"] = sub.id
-        self.write_title_callbacks(title_callbacks)
+        write_title_callbacks(title_callbacks)
         await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
                 
 
