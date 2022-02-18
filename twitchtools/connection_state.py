@@ -1,6 +1,6 @@
-from disnake import Interaction, ApplicationCommandInteraction, MessageInteraction, ComponentType
+from disnake import Interaction, ApplicationCommandInteraction, MessageInteraction, ModalInteraction, ComponentType
 from disnake.state import ConnectionState
-from .custom_context import ApplicationCustomContext
+#from .custom_context import ApplicationCustomContext
 
 
 class CustomConnectionState(ConnectionState):
@@ -23,6 +23,10 @@ class CustomConnectionState(ConnectionState):
         elif data["type"] == 4:
             interaction = ApplicationCommandInteraction(data=data, state=self)
             self.dispatch("application_command_autocomplete", interaction)
+        elif data["type"] == 5:
+            interaction = ModalInteraction(data=data, state=self)
+            self._modal_store.dispatch(interaction)
+            self.dispatch("modal_submit", interaction)
         else:
             return
 

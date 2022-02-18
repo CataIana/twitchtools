@@ -4,3 +4,4 @@ asyncio
 aiofiles
 psutil
 python-dateutil
+munch

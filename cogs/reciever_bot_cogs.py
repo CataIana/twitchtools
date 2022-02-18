@@ -24,6 +24,7 @@ from typing import Union, Callable, TypeVar
 from types import CoroutineType
 from collections.abc import Mapping
 from collections import deque
+from munch import munchify
 
 
 class TimestampOptions(Enum):
@@ -191,20 +192,75 @@ class RecieverCommands(commands.Cog):
             string = string.replace(var, "<Hidden>")
         return string
 
+    async def eval_autocomplete(ctx: disnake.ApplicationCommandInteraction, com: str):
+        if not await ctx.bot.is_owner(ctx.author):
+            return ["You do not have permission to use this command"]
+        self = ctx.application_command.cog
+        com = com.split("await ", 1)[-1] # Strip await
+        try:
+            com_split = '.'.join(com.split(".")[:-1])
+            var_request = '.'.join(com.split(".")[-1:])
+            if com_split == '':
+                com_split = var_request
+                var_request = None
+            resp = await self.aeval(ctx, com_split)
+            if isinstance(resp, CoroutineType):
+                resp = await resp
+        except Exception as ex:
+            return ["May want to keep typing...", "Exception: ", str(ex)]
+        else:
+            if type(resp) == str:
+                return [resp]
+            if type(resp) == dict:
+                resp = munchify(resp)
+
+            attributes = [] #List of all attributes
+            #get a list of all attributes and their values, along with all the functions in seperate lists
+            for attr_name in dir(resp):
+                try:
+                    attr = getattr(resp, attr_name)
+                except AttributeError:
+                    pass
+                if attr_name.startswith("_"):
+                    continue #Most methods/attributes starting with __ or _ are generally unwanted, skip them
+                if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
+                    if var_request:
+                        if not str(attr_name).startswith(var_request):
+                            continue
+                    if isinstance(attr, (list, deque)):
+                        attributes.append(shorten(com_split + "." + self.remove_tokens(
+                                f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
+                        attributes.append(shorten(com_split + "." + self.remove_tokens(
+                                f"{str(attr_name)}: {type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    elif type(attr) == set:
+                        attr_ = list(attr)
+                        attributes.append(shorten(com_split + "." + self.remove_tokens(
+                                f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    else:
+                        b = com_split + "." + self.remove_tokens(str(attr_name)) + ": {} [" + type(attr).__name__ + "]"
+                        attributes.append(b.format(str(attr)[:100-len(b)-5] + " [...]"))
+                else:
+                    if var_request:
+                        if not str(attr_name).startswith(var_request):
+                            continue
+                    if asyncio.iscoroutinefunction(attr):
+                        attributes.append(shorten(com_split + "." + f"{str(attr_name)}: [async {type(attr).__name__}]", width=100))
+                    else:
+                        attributes.append(shorten(com_split + "." + f"{str(attr_name)}: [{type(attr).__name__}]", width=100))
+            return attributes[:25]
+
     @commands.slash_command(description="Evalute a string as a command")
     @commands.is_owner()
-    async def eval(self, ctx: ApplicationCustomContext, *, com: str, respond: bool = True):
-        if isinstance(ctx, commands.Context):
-            respond = False if ctx.invoked_with == "evalr" else True
+    async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True):
+        command = command.split(":")[0]
         show_all = False
-        if isinstance(ctx, commands.Context):
-            show_all = True if ctx.invoked_with == "evala" else False
         code_string = "```nim\n{}```"
-        if com.startswith("`") and com.endswith("`"):
-            com = com[1:][:-1]
+        if command.startswith("`") and command.endswith("`"):
+            command = command[1:][:-1]
         start = time()
         try:
-            resp = await self.aeval(ctx, com)
+            resp = await self.aeval(ctx, command)
             if isinstance(resp, CoroutineType):
                 resp = await resp
         except Exception as ex:
@@ -344,7 +400,7 @@ class RecieverCommands(commands.Cog):
     @addstreamer_sub_group.sub_command(name="one", description="Only sends a notification when the streamer goes live")
     async def addmode1(self, ctx: ApplicationCustomContext, streamer_username: str,
                     notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_channel=custom_live_message, mode=1)
+        await self.addstreamer(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
 
     @addstreamer_sub_group.sub_command(name="two", description="Updates a persistent status channel when the streamer goes live and offline")
     async def addmode2(self, ctx: ApplicationCustomContext, streamer_username: str,
