@@ -89,7 +89,7 @@ class TwitchCallBackBot(commands.InteractionBot):
     async def on_application_command(self, interaction): return
 
     async def get_slash_context(self, interaction: disnake.Interaction, *, cls: Type[ACXT] = disnake.ApplicationCommandInteraction):
-        return cls(data=interaction, state=self._connection, bot=self)
+        return cls(data=interaction, state=self._connection)
 
     async def catchup_streamers(self):
         await self.wait_until_ready()

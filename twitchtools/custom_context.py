@@ -7,9 +7,7 @@ if TYPE_CHECKING:
 
 class ApplicationCustomContext(ApplicationCommandInteraction):
     def __init__(self, *args, **kwargs):
-        bot: TwitchCallBackBot = kwargs.pop("bot")
         super().__init__(*args, **kwargs)
-        self.bot = bot
         if self.bot.intents.members:
             if self.guild:
                 self.author = self.guild.get_member(self.author.id)
