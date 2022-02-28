@@ -35,8 +35,11 @@ class http:
             self.callback_url = a["callback_url"]
         except KeyError:
             raise BadAuthorization
-        self.headers = {"Authorization": f"Bearer {self.access_token}", "Client-Id": self.client_id}
         self.bot.add_listener(self._make_session, 'on_connect')
+
+    @property
+    def headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.access_token}", "Client-Id": self.client_id}
 
     async def _make_session(self):
         self.session: ClientSession = ClientSession()
@@ -45,20 +48,19 @@ class http:
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
         if response.status == 401: #Refresh access token
             reauth = await self.session.post(
-                url=f"{self.oauth2_base}/token?client_id={self.client_id}&client_secret={self.client_secret}&grant_type=client_credentials"
-            )
+                url=f"{self.oauth2_base}/token?\
+                    client_id={self.client_id}&\
+                    client_secret={self.client_secret}&\
+                    grant_type=client_credentials")
             if reauth.status == 401:
                 raise BadAuthorization
             reauth_data = await reauth.json()
             self.bot.auth["access_token"] = reauth_data["access_token"]
             async with aiofiles.open(self.storage, "w") as f:
                 await f.write(json.dumps(self.bot.auth, indent=4))
-            self.headers["Authorization"] = f"Bearer {reauth_data['access_token']}"
             self.access_token = reauth_data['access_token']
             response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
-            return response
-        else:
-            return response
+        return response
 
     def chunks(self, lst, n):
         """Yield successive n-sized chunks from lst."""
@@ -167,7 +169,11 @@ class http:
         if response.status not in [202, 409]:
             raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
         j = await response.json()
-        json_data = j["data"][0]
+        try:
+            json_data = j["data"][0]
+        except KeyError:
+            self.bot.log.info(str(j))
+            raise SubscriptionError(str(j))
         subscription = Subscription(**json_data)
 
         #Wait for subscription confirmation

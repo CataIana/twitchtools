@@ -727,12 +727,20 @@ class RecieverCommands(commands.Cog):
         else:
             await ctx.send(f"{self.bot.emotes.error} Callback test failed. Expected HTTP status code 204 but got {r.status}")
 
-
-    @commands.slash_command(description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
+    @commands.slash_command()
     @commands.is_owner()
     async def resubscribe(self, ctx: ApplicationCustomContext):
-        self.bot.log.info("Running live alert resubscribe")
         await ctx.response.defer()
+
+    @resubscribe.sub_command(name="all", description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
+    async def resubscribe_all(self, ctx: ApplicationCustomContext):
+        await self.resubscribe_live()
+        await self.resubscribe_title()
+        await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
+
+    @resubscribe.sub_command(name="live", description="Owner Only: Resubscribe live alert callbacks. Useful for domain changes")
+    async def resubscribe_live(self, ctx: ApplicationCustomContext):
+        self.bot.log.info("Running live alert resubscribe")
         callbacks = await get_callbacks()
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
@@ -746,21 +754,23 @@ class RecieverCommands(commands.Cog):
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
         await write_callbacks(callbacks)
+        if ctx.application_command.name == "live":
+            await ctx.send(f"{self.bot.emotes.success} Recreated live subscriptions!")
 
+    @resubscribe.sub_command(name="title", description="Owner Only: Resubscribe title change callbacks. Useful for domain changes")
+    async def resubscribe_title(self, ctx: ApplicationCustomContext):
         self.bot.log.info("Running title resubscribe")
         title_callbacks = await get_title_callbacks()
         for streamer, data in title_callbacks.items():
             await asyncio.sleep(0.2)
             if data.get("subscription_id", None) is not None:
                 await self.bot.api.delete_subscription(data["subscription_id"])
-            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
+            sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="titlecallback")
             await asyncio.sleep(0.2)
             title_callbacks[streamer]["subscription_id"] = sub.id
-        write_title_callbacks(title_callbacks)
-        await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
-                
-
-
+        await write_title_callbacks(title_callbacks)
+        if ctx.application_command.name == "title":
+            await ctx.send(f"{self.bot.emotes.success} Recreated title subscriptions!")
             
 async def random_string_generator(str_size):
     return "".join(choice(ascii_letters) for _ in range(str_size))
