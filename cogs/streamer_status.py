@@ -3,6 +3,7 @@ from disnake.ext import commands
 from disnake.utils import utcnow
 from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta
 from time import time
+from math import floor
 
 
 from typing import TYPE_CHECKING
@@ -14,7 +15,7 @@ class StreamStatus(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
-        self.footer_msg = "Mew" # I know you like to change the footer msg so I'll try to at least make it easier
+        self.footer_msg = "POGGIES" # I know you like to change the footer msg so I'll try to at least make it easier
 
     @commands.Cog.listener()
     async def on_title_change(self, event: TitleEvent):
@@ -125,8 +126,8 @@ class StreamStatus(commands.Cog):
                         try: #Replace the applicable strings with past tense phrasing
                             embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            extracted_game = embed.description.split('Playing ', 1)[1].split('\n')[0]
-                            embed.description = f"Was playing {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
+                            extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
+                            embed.description = f"Was streaming {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                             try:
                                 await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
                                 #await message.edit(content=f"{message.content.split(' is', 1)[0]} was live on Twitch", embed=embed)
@@ -166,24 +167,73 @@ class StreamStatus(commands.Cog):
         if self.is_live(channel_cache, stream):
             if stream.origin == AlertOrigin.callback:
                 self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
+            elif stream.origin == AlertOrigin.catchup:
+                if stream.view_count >= self.bot.viewer_milestones_minimum and stream.view_count >= self.bot.viewer_milestones.get(stream.user.username, 0)+self.bot.viewer_milestones_interval:
+                    self.bot.log.info(f"Sending viewer count notification for {stream.user.username} with view count {stream.view_count:,}")
+                    self.bot.viewer_milestones[stream.user.username] = floor((stream.view_count-self.bot.viewer_milestones_minimum)/self.bot.viewer_milestones_interval)*self.bot.viewer_milestones_interval+self.bot.viewer_milestones_minimum
+
+                    # Create embed message
+                    stream.user = await self.bot.api.get_user(user=stream.user)
+                    view_embed = disnake.Embed(
+                        title=f"{stream.user.display_name} just passed {self.bot.viewer_milestones.get(stream.user.username):,} viewers!", url=f"https://twitch.tv/{stream.user.name}",
+                        description=f"Streaming {stream.game} for {human_timedelta(stream.started_at, suffix=False, accuracy=2)}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+                        colour=8465372, timestamp=utcnow())
+                    view_embed.set_author(name=stream.title, url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
+                    view_embed.set_footer(text=self.footer_msg) # This got stuck when combined. Not sure why
+
+                    for guild_id, alert_info in callbacks[stream.user.username]["alert_roles"].items():
+                        guild = self.bot.get_guild(int(guild_id))
+                        if guild is None:
+                            continue
+
+                        if alert_info.get("title_phrase", None):
+                            if alert_info.get("title_phrase") not in stream.title.lower():
+                                self.bot.log.info(f"Didn't match title phrase for {guild.name}, skipping alert")
+                                continue
+
+                        #Format role mention
+                        if alert_info["role_id"] == "everyone":
+                            role_mention = f" {guild.default_role}"
+                        elif alert_info["role_id"] == None:
+                            role_mention = ""
+                        else:
+                            role = guild.get_role(alert_info["role_id"])
+                            if role:
+                                role_mention = f" {role.mention}"
+                            else:
+                                role_mention = ""
+
+                        alert_channel = self.bot.get_channel(alert_info.get("notif_channel_id", None))
+                        if alert_channel is not None:
+                            try:
+                                #live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
+                                user_escaped = stream.user.display_name.replace('_', '\_')
+                                await alert_channel.send(f"{user_escaped} just passed {self.bot.viewer_milestones.get(stream.user.username):,} viewers!{role_mention}", embed=view_embed)
+                            except disnake.Forbidden:
+                                pass
+                            except disnake.HTTPException:
+                                pass
+                else:
+                    self.bot.log.info(f"Not enough viewers to trigger view count notification for {stream.user.username}")
+
             return
 
         if on_cooldown: # There is a 10 minute cooldown between alerts, but live channels will still be created
             self.bot.log.info(f"Cooldown active, not sending alert for {stream.user.username} but creating channels")
 
         self.bot.log.info(f"Updating status to online for {stream.user.username}")
-
-        # Sending webhook if applicable
-        await self.do_webhook(callbacks, stream)
         
         # Create embed message
         stream.user = await self.bot.api.get_user(user=stream.user)
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
-            description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+            description=f"Streaming {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
             colour=8465372, timestamp=stream.started_at)
         embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
         embed.set_footer(text=self.footer_msg) # This got stuck when combined. Not sure why
+
+        # Sending webhook if applicable
+        await self.do_webhook(callbacks, stream, embed)
 
         #Permission overrides
         SelfOverride = disnake.PermissionOverwrite() # Make sure the bot has permission to access the channel
@@ -275,29 +325,23 @@ class StreamStatus(commands.Cog):
 
             await self.write_channel_cache(channel_cache)
 
-    async def do_webhook(self, callbacks: dict, stream: Stream):
+    async def do_webhook(self, callbacks: dict, stream: Stream, embed: disnake.Embed):
         if "webhook" in callbacks[stream.user.username].keys():
             if "format" in callbacks[stream.user.username].keys():
                 format_ = callbacks[stream.user.username]["format"].format(stream).replace("\\n", "\n")
             else:
-                format_ = f"{stream.user.display_name} is live! Playing {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
+                format_ = f"{stream.user.display_name} is live! Streaming {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
             if type(callbacks[stream.user.username]["webhook"]) == list:
                 for webhook in callbacks[stream.user.username]["webhook"]:
-                    if disnake.__version__ == "2.0.0a":
-                        webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
-                    else:
-                        webhook_obj = disnake.Webhook.from_url(webhook, session=disnake.AsyncWebhookAdapter(self.bot.aSession))
+                    webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                     try:
-                        await webhook_obj.send(content=format_)
+                        await webhook_obj.send(content=format_, embed=embed)
                     except disnake.NotFound:
                         pass
             else:
-                if disnake.__version__ == "2.0.0a":
-                    webhook = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=self.bot.aSession)
-                else:
-                    webhook_obj = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=disnake.AsyncWebhookAdapter(self.bot.aSession))
+                webhook = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=self.bot.aSession)
                 try:
-                    await webhook.send(content=format_)
+                    await webhook.send(content=format_, embed=embed)
                 except disnake.NotFound:
                     pass
 

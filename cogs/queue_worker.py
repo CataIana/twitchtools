@@ -4,13 +4,14 @@ from twitchtools import TitleEvent, Stream, User
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
+    from cogs.streamer_status import StreamStatus
 
 class QueueWorker(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
         self.worker = self.bot.loop.create_task(self.worker())
-        self.status_cog = self.bot.get_cog("StreamStatus")
+        self.status_cog: StreamStatus = self.bot.get_cog("StreamStatus")
 
     def cog_unload(self):
         self.worker.cancel()

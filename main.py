@@ -32,7 +32,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         intents.guilds = True
         super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
 
-        # You can set custom owners by filling in the owner_ids array with user IDs, just uncomment it and comment out the above line
+        # You can set custom owners by filling in the owner_ids array with user IDs, just uncomment the below line and comment out the above line
         #super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"), owner_ids=[])
 
         self.queue = Queue(maxsize=0)
@@ -41,7 +41,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.log.setLevel(logging.INFO)
 
         shandler = logging.StreamHandler(sys.stdout)
-        shandler.setLevel(logging.INFO)
+        shandler.setLevel(self.log.level)
         shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 
@@ -62,7 +62,10 @@ class TwitchCallBackBot(commands.InteractionBot):
         self._uptime = time()
         self.application_invoke = self.process_application_commands
 
-        self.alert_cooldown = 1800
+        self.alert_cooldown: int = 1800
+        self.viewer_milestones: dict[str, int] = {}
+        self.viewer_milestones_interval: int = 50000
+        self.viewer_milestones_minimum: int = 100000
 
     async def close(self):
         if not self.aSession.closed:
@@ -91,7 +94,7 @@ class TwitchCallBackBot(commands.InteractionBot):
     async def on_application_command(self, interaction): return
 
     async def get_slash_context(self, interaction: disnake.Interaction, *, cls: Type[ACXT] = disnake.ApplicationCommandInteraction):
-        return cls(data=interaction, state=self._connection, bot=self)
+        return cls(data=interaction, state=self._connection)
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
@@ -103,9 +106,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         for streamer, data in callbacks.items(): #Iterate through all callbacks and update all streamers
             if data["channel_id"] in online_streams:
                 self.queue.put_nowait([x for x in streams if x.user.id == data["channel_id"]][0])
-                #self.dispatch("streamer_online", [x for x in streams if x.user.id == data["channel_id"]][0])
             else:
-                #self.dispatch("streamer_offline", PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
                 self.queue.put_nowait(PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
     
 

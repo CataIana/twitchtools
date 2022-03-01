@@ -116,7 +116,7 @@ class RecieverCommands(commands.Cog):
         self.backup_checks.cancel()
         pass
 
-    @tasks.loop(seconds=1800)
+    @tasks.loop(seconds=120)
     async def backup_checks(self):
         await self.bot.catchup_streamers()
         self.bot.log.info("Ran streamer catchup")
@@ -567,18 +567,26 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Alert Role", value=alert_role, inline=True)
         await ctx.send(embed=embed)
 
+    async def streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+        callbacks = await ctx.application_command.cog.get_callbacks()
+        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
+
     @commands.slash_command()
     @has_guild_permissions(owner_override=True, manage_guild=True)
-    async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str):
+    async def delstreamer(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamer_autocomplete)):
         """
         Remove live alerts for a streamer
         """
         await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
+    async def streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+        callbacks = await ctx.application_command.cog.get_title_callbacks()
+        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
+
     @commands.slash_command()
     @has_guild_permissions(owner_override=True, manage_guild=True)
-    async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str):
+    async def deltitlechange(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=streamertitles_autocomplete)):
         """
         Remove title change alerts for a streamer
         """
