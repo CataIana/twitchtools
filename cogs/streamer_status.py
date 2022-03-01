@@ -123,8 +123,8 @@ class StreamStatus(commands.Cog):
                         try: #Replace the applicable strings with past tense phrasing
                             embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
-                            extracted_game = embed.description.split('Playing ', 1)[1].split('\n')[0]
-                            embed.description = f"Was playing {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
+                            extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
+                            embed.description = f"Was streaming {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                             try:
                                 await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
                                 #await message.edit(content=message.content.replace("is live on Twitch!", "was live on Twitch!"), embed=embed)
@@ -178,7 +178,7 @@ class StreamStatus(commands.Cog):
         stream.user = await self.bot.api.get_user(user=stream.user)
         embed = disnake.Embed(
             title=stream.title, url=f"https://twitch.tv/{stream.user.name}",
-            description=f"Playing {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+            description=f"Streaming {stream.game}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
             colour=8465372, timestamp=stream.started_at)
         embed.set_author(name=f"{stream.user.display_name} is now live on Twitch!", url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
         embed.set_footer(text="Mew")
@@ -269,7 +269,7 @@ class StreamStatus(commands.Cog):
             if "format" in callbacks[stream.user.username].keys():
                 format_ = callbacks[stream.user.username]["format"].format(stream).replace("\\n", "\n")
             else:
-                format_ = f"{stream.user.display_name} is live! Playing {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
+                format_ = f"{stream.user.display_name} is live! Streaming {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
             if type(callbacks[stream.user.username]["webhook"]) == list:
                 for webhook in callbacks[stream.user.username]["webhook"]:
                     if disnake.__version__ == "2.0.0a":
