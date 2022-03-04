@@ -18,7 +18,7 @@ from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin, Confirm
-from twitchtools import TextPaginator, human_timedelta, get_manager_role, write_manager_role, get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache
+from twitchtools import TextPaginator, human_timedelta, get_manager_role, write_manager_role, get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache, write_channel_cache
 from twitchtools.exceptions import SubscriptionError
 from typing import Union, Callable, TypeVar
 from types import CoroutineType
@@ -662,7 +662,7 @@ class RecieverCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     async def streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
-        callbacks = await ctx.application_command.cog.get_callbacks()
+        callbacks = await get_callbacks()
         return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
 
     @commands.slash_command()
@@ -671,11 +671,28 @@ class RecieverCommands(commands.Cog):
         """
         Remove live alerts for a streamer
         """
+        callbacks = await get_callbacks()
+        channel_cache = await get_channel_cache()
+        for channel_id in channel_cache[streamer].get("live_channels", []):
+            channel = self.bot.get_channel(channel_id)
+            if channel:
+                if channel.guild == ctx.guild:
+                    try:
+                        if callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
+                            await channel.delete()
+                        # elif callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
+                        #     await channel.edit(name="stream-offline")
+                    except disnake.Forbidden:
+                        continue
+                    except disnake.HTTPException:
+                        continue
+            channel_cache[streamer]["live_channels"].remove(channel_id)
+        await write_channel_cache(channel_cache)
         await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     async def streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
-        callbacks = await ctx.application_command.cog.get_title_callbacks()
+        callbacks = await get_title_callbacks()
         return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
 
     @commands.slash_command()
@@ -710,6 +727,10 @@ class RecieverCommands(commands.Cog):
             except KeyError:
                 pass
             del callbacks[streamer]
+            channel_cache = await get_channel_cache()
+            if channel_cache.get(streamer, None):
+                del channel_cache[streamer]
+                await write_channel_cache(channel_cache)
         async with aiofiles.open(f"config/{config_file}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
