@@ -271,22 +271,13 @@ class StreamStatus(commands.Cog):
             else:
                 format_ = f"{stream.user.display_name} is live! Streaming {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
             if type(callbacks[stream.user.username]["webhook"]) == list:
-                for webhook in callbacks[stream.user.username]["webhook"]:
-                    if disnake.__version__ == "2.0.0a":
-                        webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
-                    else:
-                        webhook_obj = disnake.Webhook.from_url(webhook, session=disnake.AsyncWebhookAdapter(self.bot.aSession))
-                    try:
-                        await webhook_obj.send(content=format_)
-                    except disnake.NotFound:
-                        pass
+                webhooks = callbacks[stream.user.username]["webhook"]
             else:
-                if disnake.__version__ == "2.0.0a":
-                    webhook = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=self.bot.aSession)
-                else:
-                    webhook_obj = disnake.Webhook.from_url(callbacks[stream.user.username]["webhook"], session=disnake.AsyncWebhookAdapter(self.bot.aSession))
+                webhooks = [callbacks[stream.user.username]["webhook"]]
+            for webhook in webhooks:
+                webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                 try:
-                    await webhook.send(content=format_)
+                    await webhook_obj.send(content=format_)
                 except disnake.NotFound:
                     pass
 
