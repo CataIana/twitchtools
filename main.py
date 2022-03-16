@@ -63,9 +63,10 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.application_invoke = self.process_application_commands
 
         self.alert_cooldown: int = 1800
-        self.viewer_milestones: dict[str, int] = {}
         self.viewer_milestones_interval: int = 50000
         self.viewer_milestones_minimum: int = 100000
+        #self.viewer_milestones_interval: int = 100
+        #self.viewer_milestones_minimum: int = 100
 
     async def close(self):
         if not self.aSession.closed:

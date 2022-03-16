@@ -138,6 +138,7 @@ class StreamStatus(commands.Cog):
         
         # Remove data once used
         channel_cache[streamer.username].pop("live_alerts", None)
+        channel_cache[streamer.username].pop("viewer_milestone", None)
 
         # Update cache
         await self.write_channel_cache(channel_cache)
@@ -151,6 +152,10 @@ class StreamStatus(commands.Cog):
         c = dict(channel_cache.get(stream.user.username, {}))
         try:
             del c["alert_cooldown"]
+        except KeyError:
+            pass
+        try:
+            del c["viewer_milestone"]
         except KeyError:
             pass
         if c == {}:
@@ -168,14 +173,15 @@ class StreamStatus(commands.Cog):
             if stream.origin == AlertOrigin.callback:
                 self.bot.log.info(f"Ignoring alert while live for {stream.user.username}")
             elif stream.origin == AlertOrigin.catchup:
-                if stream.view_count >= self.bot.viewer_milestones_minimum and stream.view_count >= self.bot.viewer_milestones.get(stream.user.username, 0)+self.bot.viewer_milestones_interval:
+                if stream.view_count >= self.bot.viewer_milestones_minimum and stream.view_count >= channel_cache[stream.user.username].get("viewer_milestone", 0)+self.bot.viewer_milestones_interval:
                     self.bot.log.info(f"Sending viewer count notification for {stream.user.username} with view count {stream.view_count:,}")
-                    self.bot.viewer_milestones[stream.user.username] = floor((stream.view_count-self.bot.viewer_milestones_minimum)/self.bot.viewer_milestones_interval)*self.bot.viewer_milestones_interval+self.bot.viewer_milestones_minimum
+                    channel_cache[stream.user.username]["viewer_milestone"] = floor((stream.view_count-self.bot.viewer_milestones_minimum)/self.bot.viewer_milestones_interval)*self.bot.viewer_milestones_interval+self.bot.viewer_milestones_minimum
+                    await self.write_channel_cache(channel_cache)
 
                     # Create embed message
                     stream.user = await self.bot.api.get_user(user=stream.user)
                     view_embed = disnake.Embed(
-                        title=f"{stream.user.display_name} just passed {self.bot.viewer_milestones.get(stream.user.username):,} viewers!", url=f"https://twitch.tv/{stream.user.name}",
+                        title=f"{stream.user.display_name} just passed {channel_cache[stream.user.username].get('viewer_milestone', 0):,} viewers!", url=f"https://twitch.tv/{stream.user.name}",
                         description=f"Streaming {stream.game} for {human_timedelta(stream.started_at, suffix=False, accuracy=2)}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
                         colour=8465372, timestamp=utcnow())
                     view_embed.set_author(name=stream.title, url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
@@ -208,7 +214,7 @@ class StreamStatus(commands.Cog):
                             try:
                                 #live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
                                 user_escaped = stream.user.display_name.replace('_', '\_')
-                                await alert_channel.send(f"{user_escaped} just passed {self.bot.viewer_milestones.get(stream.user.username):,} viewers!{role_mention}", embed=view_embed)
+                                await alert_channel.send(f"{user_escaped} just passed {channel_cache[stream.user.username].get('viewer_milestone', 0):,} viewers!{role_mention}", embed=view_embed)
                             except disnake.Forbidden:
                                 pass
                             except disnake.HTTPException:

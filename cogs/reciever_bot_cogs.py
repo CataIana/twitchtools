@@ -17,8 +17,7 @@ import psutil
 from textwrap import shorten
 from enum import Enum
 from main import TwitchCallBackBot
-from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext
-from twitchtools import AlertOrigin
+from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin, human_timedelta
 from twitchtools.exceptions import SubscriptionError
 from typing import Union
 from types import CoroutineType
@@ -37,38 +36,6 @@ class TimezoneOptions(Enum):
 
 def DiscordTimezone(utc, format: TimezoneOptions):
     return f"<t:{int(utc)}:{format.value}>"
-
-class pretty_time:
-    def __init__(self, unix, duration=False):
-        unix = float(unix)
-        if not duration:
-            self.unix_diff = time() - unix
-        else:
-            self.unix_diff = unix
-        self.unix = unix
-        self.years = int(str(self.unix_diff // 31536000).split('.')[0])
-        self.days = int(str(self.unix_diff // 86400 % 365).split('.')[0])
-        self.hours = int(str(self.unix_diff // 3600 % 24).split('.')[0])
-        self.minutes = int(str(self.unix_diff // 60 % 60).split('.')[0])
-        self.seconds = int(str(self.unix_diff % 60).split('.')[0])
-        timezone_datetime = datetime.fromtimestamp(unix)
-        self.datetime = timezone_datetime.strftime('%I:%M:%S %p %Y-%m-%d %Z')
-
-        self.dict = {"days": self.days, "hours": self.hours, "minutes": self.minutes, "seconds": self.seconds, "datetime": self.datetime}
-
-        full = []
-        if self.years != 0:
-            full.append(f"{self.years} {'year' if self.years == 1 else 'years'}")
-        if self.days != 0:
-            full.append(f"{self.days} {'day' if self.days == 1 else 'days'}")
-        if self.hours != 0:
-            full.append(f"{self.hours} {'hour' if self.hours == 1 else 'hours'}")
-        if self.minutes != 0:
-            full.append(f"{self.minutes} {'minute' if self.minutes == 1 else 'minutes'}")
-        if self.seconds != 0:
-            full.append(f"{self.seconds} {'second' if self.seconds == 1 else 'seconds'}")
-        full = (', '.join(full[0:-1]) + " and " + ' '.join(full[-1:])) if len(full) > 1 else ', '.join(full)
-        self.prettify = full
 
 from typing import Callable, TypeVar
 T = TypeVar("T")
@@ -106,7 +73,7 @@ def has_guild_permissions(owner_override: bool = False, **perms: bool) -> Callab
     return commands.check(predicate)
 
 class RecieverCommands(commands.Cog):
-    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks
+    from twitchtools.files import get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache, write_channel_cache
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
@@ -163,7 +130,6 @@ class RecieverCommands(commands.Cog):
     @commands.slash_command(description="Get various bot information such as memory usage and version")
     @has_guild_permissions(owner_override=True, manage_guild=True)
     async def botstatus(self, ctx: ApplicationCustomContext):
-        p = pretty_time(self.bot._uptime)
         embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
         if self.bot.owner_id is None:
             owner_objs = [str(self.bot.get_user(user)) for user in self.bot.owner_ids]
@@ -178,7 +144,7 @@ class RecieverCommands(commands.Cog):
         alert_count = 0
         for data in callbacks.values():
             alert_count += len(data["alert_roles"].values())
-        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {p.prettify}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
+        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
         memory = psutil.virtual_memory()
         cpu_freq = psutil.cpu_freq()
@@ -577,6 +543,23 @@ class RecieverCommands(commands.Cog):
         """
         Remove live alerts for a streamer
         """
+        callbacks = await self.get_callbacks()
+        channel_cache = await self.get_channel_cache()
+        for channel_id in channel_cache[streamer].get("live_channels", []):
+            channel = self.bot.get_channel(channel_id)
+            if channel:
+                if channel.guild == ctx.guild:
+                    try:
+                        if callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
+                            await channel.delete()
+                        # elif callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
+                        #     await channel.edit(name="stream-offline")
+                    except disnake.Forbidden:
+                        continue
+                    except disnake.HTTPException:
+                        continue
+            channel_cache[streamer]["live_channels"].remove(channel_id)
+        await self.write_channel_cache(channel_cache)
         await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
