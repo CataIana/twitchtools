@@ -144,11 +144,11 @@ class RecieverCommands(commands.Cog):
         alert_count = 0
         for data in callbacks.values():
             alert_count += len(data["alert_roles"].values())
-        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
+        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimezoneOptions.month_day_year_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**Subscribed Streamers:** {len(callbacks.keys())}\n**Notification Count:** {alert_count}"
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
         memory = psutil.virtual_memory()
         cpu_freq = psutil.cpu_freq()
-        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Disnake Version:** {disnake.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**<:microprocessor:879591544070488074> System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
+        systeminfo = f"**🐍 Python Version:** {sys.version.split()[0]}\n**🐍 Disnake Version:** {disnake.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**📝 Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**📝 System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
         embed.set_footer(text=f"Client ID: {self.bot.user.id}")
@@ -545,7 +545,7 @@ class RecieverCommands(commands.Cog):
         """
         callbacks = await self.get_callbacks()
         channel_cache = await self.get_channel_cache()
-        for channel_id in channel_cache[streamer].get("live_channels", []):
+        for channel_id in channel_cache.get(streamer, {}).get("live_channels", []):
             channel = self.bot.get_channel(channel_id)
             if channel:
                 if channel.guild == ctx.guild:
@@ -558,7 +558,10 @@ class RecieverCommands(commands.Cog):
                         continue
                     except disnake.HTTPException:
                         continue
-            channel_cache[streamer]["live_channels"].remove(channel_id)
+        try:
+            del channel_cache[streamer]
+        except KeyError:
+            pass
         await self.write_channel_cache(channel_cache)
         await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
@@ -625,14 +628,17 @@ class RecieverCommands(commands.Cog):
         self.bot.log.info("Running live alert resubscribe")
         await ctx.response.defer()
         callbacks = await self.get_callbacks()
+        all_ids = [s.id for s in await self.bot.api.get_subscriptions()]
+        for sub_id in all_ids:
+            await self.bot.api.delete_subscription(sub_id)
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
-            if data.get("online_id", None) is not None:
+            if data.get("online_id", None) is not None and data.get("online_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["online_id"])
             rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
             callbacks[streamer]["online_id"] = rj1.id
-            if data.get("offline_id", None) is not None:
+            if data.get("offline_id", None) is not None and data.get("offline_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["offline_id"])
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
@@ -641,7 +647,7 @@ class RecieverCommands(commands.Cog):
             add_title = any([a for a in data["alert_roles"].values() if a.get("title_phrase", None) is not None])
 
             if add_title:
-                if data.get("title_id", None) is not None:
+                if data.get("title_id", None) is not None and data.get("title_id", None) not in all_ids:
                     await self.bot.api.delete_subscription(data["title_id"])
                 rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="phrasecheck")
                 callbacks[streamer]["title_id"] = rj3.id
@@ -651,7 +657,7 @@ class RecieverCommands(commands.Cog):
         title_callbacks = await self.get_title_callbacks()
         for streamer, data in title_callbacks.items():
             await asyncio.sleep(0.2)
-            if data.get("subscription_id", None) is not None:
+            if data.get("subscription_id", None) is not None and data.get("subscription_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["subscription_id"])
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)

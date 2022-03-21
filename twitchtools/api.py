@@ -135,13 +135,21 @@ class http:
         s.origin = origin
         return s
 
-    async def get_subscription(self, id) -> Union[Subscription, None]:
+    async def get_subscription(self, id: str) -> Union[Subscription, None]:
         r = await self._request(f"{self.base}/eventsub/subscriptions")
         rj = await r.json()
         for sub in rj["data"]:
             if sub["id"] == id:
                 return Subscription(**sub)
         return None
+
+    async def get_subscriptions(self) -> List[Subscription]:
+        r = await self._request(f"{self.base}/eventsub/subscriptions")
+        rj = await r.json()
+        subs = []
+        for sub in rj["data"]:
+            subs.append(Subscription(**sub))
+        return subs
 
     def get_event(self, data) -> SubscriptionEvent:
         event_type = SubscriptionType(data["subscription"]["type"])
@@ -167,7 +175,11 @@ class http:
             m = await response.json()
             raise SubscriptionError(f"There was an error subscribing to the eventsub. Error: {m['status']} {m['error']}: {m['message']}")
         j = await response.json()
-        json_data = j["data"][0]
+        try:
+            json_data = j["data"][0]
+        except KeyError:
+            self.bot.log.error(f"Subscription Create Error: {str(j)}")
+            raise SubscriptionError(f"There was an error subscribing to the eventsub. `{str(j)}`")
         subscription = Subscription(**json_data)
 
         #Wait for subscription confirmation
