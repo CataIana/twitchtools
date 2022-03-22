@@ -207,7 +207,7 @@ class RecieverCommands(commands.Cog):
             if isinstance(resp, CoroutineType):
                 resp = await resp
         except Exception as ex:
-            return ["May want to keep typing...", "Exception: ", str(ex)]
+            return ["May want to keep typing...", "Exception: ", str(ex), com]
         else:
             if type(resp) == str:
                 return [resp]
@@ -673,7 +673,7 @@ class RecieverCommands(commands.Cog):
         """
         callbacks = await get_callbacks()
         channel_cache = await get_channel_cache()
-        for channel_id in channel_cache[streamer].get("live_channels", []):
+        for channel_id in channel_cache.get(streamer, {}).get("live_channels", []):
             channel = self.bot.get_channel(channel_id)
             if channel:
                 if channel.guild == ctx.guild:
@@ -686,7 +686,10 @@ class RecieverCommands(commands.Cog):
                         continue
                     except disnake.HTTPException:
                         continue
-            channel_cache[streamer]["live_channels"].remove(channel_id)
+        try:
+            del channel_cache[streamer]
+        except KeyError:
+            pass
         await write_channel_cache(channel_cache)
         await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
@@ -755,22 +758,27 @@ class RecieverCommands(commands.Cog):
 
     @resubscribe.sub_command(name="all", description="Owner Only: Resubscribe every setup callback. Useful for domain changes")
     async def resubscribe_all(self, ctx: ApplicationCustomContext):
-        await self.resubscribe_live()
-        await self.resubscribe_title()
+        await self.resubscribe_live(ctx)
+        await self.resubscribe_title(ctx)
         await ctx.send(f"{self.bot.emotes.success} Recreated all subscriptions!")
 
     @resubscribe.sub_command(name="live", description="Owner Only: Resubscribe live alert callbacks. Useful for domain changes")
     async def resubscribe_live(self, ctx: ApplicationCustomContext):
         self.bot.log.info("Running live alert resubscribe")
         callbacks = await get_callbacks()
+        all_subs = await self.bot.api.get_subscriptions()
+        all_ids = [s.id for s in all_subs if s.type in [SubscriptionType.STREAM_ONLINE, SubscriptionType.STREAM_OFFLINE]]
+        for subscription in all_subs:
+            if subscription.type in [SubscriptionType.STREAM_ONLINE, SubscriptionType.STREAM_OFFLINE]:
+                await self.bot.api.delete_subscription(subscription.id)
         for streamer, data in callbacks.items():
             await asyncio.sleep(0.2)
-            if data.get("online_id", None) is not None:
+            if data.get("online_id", None) is not None and data.get("online_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["online_id"])
             rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             await asyncio.sleep(0.2)
             callbacks[streamer]["online_id"] = rj1.id
-            if data.get("offline_id", None) is not None:
+            if data.get("offline_id", None) is not None and data.get("offline_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["offline_id"])
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
@@ -781,10 +789,15 @@ class RecieverCommands(commands.Cog):
     @resubscribe.sub_command(name="title", description="Owner Only: Resubscribe title change callbacks. Useful for domain changes")
     async def resubscribe_title(self, ctx: ApplicationCustomContext):
         self.bot.log.info("Running title resubscribe")
+        all_subs = await self.bot.api.get_subscriptions()
+        all_ids = [s.id for s in all_subs if s.type == SubscriptionType.CHANNEL_UPDATE]
+        for subscription in all_subs:
+            if subscription.type in [SubscriptionType.CHANNEL_UPDATE]:
+                await self.bot.api.delete_subscription(subscription.id)
         title_callbacks = await get_title_callbacks()
         for streamer, data in title_callbacks.items():
             await asyncio.sleep(0.2)
-            if data.get("subscription_id", None) is not None:
+            if data.get("subscription_id", None) is not None and data.get("subscription_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["subscription_id"])
             sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="titlecallback")
             await asyncio.sleep(0.2)
