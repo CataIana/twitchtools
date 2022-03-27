@@ -66,10 +66,7 @@ class RecieverWebServer:
         if channel == "_callbacktest":
             return web.Response(status=204)
         try:
-            if callback_type == "titlecallback":
-                callbacks = await get_title_callbacks()
-            else:
-                callbacks = await get_callbacks()
+            callbacks = await get_callbacks()
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
