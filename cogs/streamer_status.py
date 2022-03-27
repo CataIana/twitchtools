@@ -1,7 +1,7 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta
+from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta, Ratelimit, RateLimitExceeded
 from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache
 from time import time
 
@@ -14,6 +14,7 @@ class StreamStatus(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
+        self.ratelimits: dict[str, Ratelimit] = {}
 
     async def on_title_change(self, event: TitleEvent):
         await self.bot.wait_until_ready()
@@ -44,6 +45,13 @@ class StreamStatus(commands.Cog):
         stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
             #self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
+            if self.ratelimits.get(event.broadcaster.username, None) is None:
+                self.ratelimits[event.broadcaster.username] = Ratelimit(calls=10, period=600)
+            try:
+                self.ratelimits[event.broadcaster.username].request()
+            except RateLimitExceeded:
+                self.bot.log.info(f"Title update ratelimit for {event.broadcaster.username} exceeded!")
+                return
             channel_cache = await get_channel_cache()
             stream.user = await self.bot.api.get_user(user=stream.user)
             embed = disnake.Embed(
