@@ -1,5 +1,5 @@
 from disnake.ext import commands
-from twitchtools import TitleEvent, Stream, User
+from twitchtools import TitleEvent, Stream, User, PartialUser
 
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ class QueueWorker(commands.Cog):
                     await self.status_cog.on_streamer_online(item)
                 self.bot.dispatch("streamer_online", item)
 
-            elif isinstance(item, User): # Stream offline
+            elif isinstance(item, (User, PartialUser)): # Stream offline
                 if self.status_cog:
                     await self.status_cog.on_streamer_offline(item)
                 self.bot.dispatch("streamer_offline", item)
@@ -39,6 +39,9 @@ class QueueWorker(commands.Cog):
                 if self.status_cog:
                     await self.status_cog.on_title_change(item)
                 self.bot.dispatch("title_change", item)
+
+            else:
+                self.bot.log.warn(f"Recieved bad queue object with type \"{type(item).__name__}\"!")
 
             self.bot.log.debug(f"Finished task {type(item).__name__}")
             self.bot.queue.task_done()

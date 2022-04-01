@@ -1,9 +1,10 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta, Ratelimit, RateLimitExceeded
+from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, human_timedelta, Ratelimit, RateLimitExceeded
 from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache
 from time import time
+from typing import Union
 
 
 from typing import TYPE_CHECKING
@@ -106,7 +107,7 @@ class StreamStatus(commands.Cog):
                 except disnake.HTTPException:
                     pass
 
-    async def on_streamer_offline(self, streamer: User):
+    async def on_streamer_offline(self, streamer: Union[User, PartialUser]):
         await self.bot.wait_until_ready()
         channel_cache = await get_channel_cache()
         callbacks = await get_callbacks()
