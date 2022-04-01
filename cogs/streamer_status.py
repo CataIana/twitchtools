@@ -1,9 +1,10 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools import Stream, TitleEvent, User, AlertOrigin, human_timedelta
+from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, human_timedelta
 from time import time
 from math import floor
+from typing import Union
 
 
 from typing import TYPE_CHECKING
@@ -81,7 +82,7 @@ class StreamStatus(commands.Cog):
                     pass
 
     @commands.Cog.listener()
-    async def on_streamer_offline(self, streamer: User):
+    async def on_streamer_offline(self, streamer: Union[User, PartialUser]):
         await self.bot.wait_until_ready()
         channel_cache = await self.get_channel_cache()
         callbacks = await self.get_callbacks()
