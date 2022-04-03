@@ -20,8 +20,6 @@ class StreamStatus(commands.Cog):
     async def on_title_change(self, event: TitleEvent):
         await self.bot.wait_until_ready()
         title_callbacks = await get_title_callbacks()
-        if not title_callbacks:
-            return
         title_cache = await get_title_cache()
         old_title = title_cache.get(event.broadcaster.username, {}).get("cached_title", "<no title>") #Get cached information for streamer, or none
         old_game = title_cache.get(event.broadcaster.username, {}).get("cached_game", "<no game>")
