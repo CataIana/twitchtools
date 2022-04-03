@@ -365,15 +365,9 @@ class RecieverCommands(commands.Cog):
                 callbacks[streamer.username]["online_id"] = sub1.id
                 sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
                 callbacks[streamer.username]["offline_id"] = sub2.id
-                if title_phrase:
-                    sub3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callbacks[streamer.username]["secret"], _type="phrasecheck")
-                    callbacks[streamer.username]["title_id"] = sub3.id
+                sub3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callbacks[streamer.username]["secret"], _type="titlecallback")
+                callbacks[streamer.username]["title_id"] = sub3.id
             except SubscriptionError as e:
-                if title_phrase:
-                    try:
-                        await self.bot.api.delete_subscription(callbacks[streamer.username]["title_id"])
-                    except KeyError:
-                        pass
                 await self.callback_deletion(ctx, streamer.username, config_file="callbacks.json")
                 raise SubscriptionError(str(e))
 
@@ -501,10 +495,8 @@ class RecieverCommands(commands.Cog):
         #Create file structure and subscriptions if necessary
         title_callbacks = await self.get_title_callbacks()
         
-        make_subscriptions = False
         if streamer.username not in title_callbacks.keys():
-            make_subscriptions = True
-            title_callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
+            title_callbacks[streamer.username] = {"channel_id": streamer.id, "alert_roles": {}}
             
         title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
         if alert_role == None:
@@ -513,17 +505,6 @@ class RecieverCommands(commands.Cog):
             title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
             title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
-
-        await self.write_title_callbacks(title_callbacks)
-
-        if make_subscriptions:
-            await ctx.response.defer()
-            try:
-                sub = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, _type="titlecallback", secret=title_callbacks[streamer.username]["secret"])
-            except SubscriptionError as e:
-                await self.callback_deletion(ctx, streamer.username, config_file="title_callbacks.json", _type="title")
-                raise SubscriptionError(str(e))
-            title_callbacks[streamer.username]["subscription_id"] = sub.id
 
         await self.write_title_callbacks(title_callbacks)
 
@@ -594,13 +575,10 @@ class RecieverCommands(commands.Cog):
         if callbacks[streamer]["alert_roles"] == {}:
             self.bot.log.info(f"Streamer {streamer} has no more alerts, purging")
             try:
-                if _type == "title":
-                    await self.bot.api.delete_subscription(callbacks[streamer]['subscription_id'])
-                elif _type == "status":
+                if _type == "status":
                     await self.bot.api.delete_subscription(callbacks[streamer]['offline_id'])
                     await self.bot.api.delete_subscription(callbacks[streamer]['online_id'])
-                    if callbacks[streamer].get("title_id", None):
-                        await self.bot.api.delete_subscription(callbacks[streamer]['title_id'])
+                    await self.bot.api.delete_subscription(callbacks[streamer]['title_id'])
             except KeyError:
                 pass
             del callbacks[streamer]
@@ -642,15 +620,10 @@ class RecieverCommands(commands.Cog):
                 await self.bot.api.delete_subscription(data["offline_id"])
             rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
             callbacks[streamer]["offline_id"] = rj2.id
-
-
-            add_title = any([a for a in data["alert_roles"].values() if a.get("title_phrase", None) is not None])
-
-            if add_title:
-                if data.get("title_id", None) is not None and data.get("title_id", None) not in all_ids:
-                    await self.bot.api.delete_subscription(data["title_id"])
-                rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="phrasecheck")
-                callbacks[streamer]["title_id"] = rj3.id
+            if data.get("title_id", None) is not None and data.get("title_id", None) not in all_ids:
+                await self.bot.api.delete_subscription(data["title_id"])
+            rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="titlecallback")
+            callbacks[streamer]["title_id"] = rj3.id
         await self.write_callbacks(callbacks)
 
         self.bot.log.info("Running title resubscribe")

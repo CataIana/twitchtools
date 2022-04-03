@@ -15,6 +15,9 @@ class Subscription:
         self.callback: str = transport["callback"]
         self.cost: int = int(cost)
 
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__} id={self.id} broadcaster_id={self.broadcaster_user_id} callback={self.callback}>"
+
 class SubscriptionEvent(Subscription):
     def __init__(self, **kwargs):
         self._subscription = kwargs["subscription"]

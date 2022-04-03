@@ -70,19 +70,12 @@ class RecieverWebServer:
         if channel == "_callbacktest":
             return web.Response(status=204)
         try:
-            if callback_type == "titlecallback":
-                callbacks = await self.get_title_callbacks()
-            elif callback_type == "callback":
-                callbacks = await self.get_callbacks()
-            elif callback_type == "phrasecheck":
-                callbacks = await self.get_callbacks()
-            else:
-                return web.Response(status=400)
+            callbacks = await self.get_callbacks()
         except FileNotFoundError:
-            self.bot.log.error("Failed to read title callbacks config file!")
+            self.bot.log.error("Failed to read callbacks config file!")
             return
         except JSONDecodeError:
-            self.bot.log.error("Failed to read title callbacks config file!")
+            self.bot.log.error("Failed to read callbacks config file!")
             return
         if channel not in callbacks.keys():
             self.bot.log.info(f"Request for {channel} not found")
@@ -118,15 +111,13 @@ class RecieverWebServer:
                 self.bot.log.critical(f"Authorization Revoked for {channel}!")
             return web.Response(status=202)
         elif mode == "notification":
-            if callback_type == "titlecallback":
+            if callback_type in ["titlecallback", "phrasecheck"]:
                 self.bot.log.info(f"Title Change Notification for {channel}")
-                return await self.title_notification(channel, data)
+                await self.title_notification(channel, data)
+                return await self.title_phrase_notification(channel, data)
             elif callback_type == "callback":
                 self.bot.log.info(f"Notification for {channel}")
                 return await self.notification(channel, data)
-            elif callback_type == "phrasecheck":
-                self.bot.log.info(f"Title Change Phrase Check Notification for {channel}")
-                return await self.title_phrase_notification(channel, data)
         else:
             self.bot.log.warning("Unknown mode")
         return web.Response(status=404)
@@ -134,24 +125,20 @@ class RecieverWebServer:
     async def title_phrase_notification(self, channel, data):
         channel = data["event"].get("broadcaster_user_login", channel)
         streamer = await self.bot.api.get_user(user_login=channel)
-        callbacks = await self.get_callbacks()
         stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
-        if callbacks[streamer.username].get("title_id", None):
-            if stream:
-                self.bot.log.info(stream.title)
-                #Patch stream info due to it being outdated
-                stream.title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
-                stream.stream_title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
-                try:
-                    stream.language = Languages[data["event"]["language"].upper()]
-                except KeyError:
-                    stream.language = Languages.OTHER
+        if stream:
+            #Patch stream info due to it being outdated
+            stream.title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
+            stream.stream_title = "<no title>" if data["event"]["title"] == "" else data["event"]["title"]
+            try:
+                stream.language = Languages[data["event"]["language"].upper()]
+            except KeyError:
+                stream.language = Languages.OTHER
 
-                stream.game = "<no game>" if data["event"]["category_name"] == "" else data["event"]["category_name"]
-                stream.game_name = stream.game
-                stream.game_id = data["event"]["category_id"]
-                self.bot.log.info(stream.title)
-                self.bot.queue.put_nowait(stream)
+            stream.game = "<no game>" if data["event"]["category_name"] == "" else data["event"]["category_name"]
+            stream.game_name = stream.game
+            stream.game_id = data["event"]["category_id"]
+            self.bot.queue.put_nowait(stream)
 
         return web.Response(status=202)
 

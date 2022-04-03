@@ -1,7 +1,7 @@
 import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
-from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, human_timedelta
+from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, human_timedelta, Ratelimit, RateLimitExceeded
 from time import time
 from math import floor
 from typing import Union
@@ -17,13 +17,12 @@ class StreamStatus(commands.Cog):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
         self.footer_msg = "POGGIES" # I know you like to change the footer msg so I'll try to at least make it easier
+        self.ratelimits: dict[str, Ratelimit] = {}
 
     @commands.Cog.listener()
     async def on_title_change(self, event: TitleEvent):
         await self.bot.wait_until_ready()
         title_callbacks = await self.get_title_callbacks()
-        if not title_callbacks:
-            return
         title_cache = await self.get_title_cache()
         old_title = title_cache.get(event.broadcaster.username, {}).get("cached_title", "<no title>") #Get cached information for streamer, or none
         old_game = title_cache.get(event.broadcaster.username, {}).get("cached_game", "<no game>")
@@ -47,7 +46,35 @@ class StreamStatus(commands.Cog):
 
         stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
-            self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
+            #self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
+            if self.ratelimits.get(event.broadcaster.username, None) is None:
+                self.ratelimits[event.broadcaster.username] = Ratelimit(calls=10, period=600)
+            try:
+                self.ratelimits[event.broadcaster.username].request()
+            except RateLimitExceeded:
+                self.bot.log.info(f"Title update ratelimit for {event.broadcaster.username} exceeded!")
+                return
+            channel_cache = await self.get_channel_cache()
+            stream.user = await self.bot.api.get_user(user=stream.user)
+            embed = disnake.Embed(
+                title=event.title, url=f"https://twitch.tv/{event.broadcaster.username}",
+                description=f"Streaming {event.game}\n[Watch Stream](https://twitch.tv/{event.broadcaster.name})",
+                colour=8465372, timestamp=stream.started_at)
+            embed.set_author(name=f"{event.broadcaster.display_name} is now live on Twitch!", url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=stream.user.avatar)
+            embed.set_footer(text="Mew")
+            for m in channel_cache.get(event.broadcaster.username, {}).get("live_alerts", []):
+                channel = self.bot.get_channel(m.get("channel", None))
+                if channel:
+                    try:
+                        message = await channel.fetch_message(m.get("message", None))
+                        await message.edit(embed=embed)
+                    except disnake.NotFound:
+                        pass
+                    except disnake.Forbidden:
+                        pass
+            return
+
+        if title_callbacks.get(event.broadcaster.username, None) is None:
             return
 
         user = await self.bot.api.get_user(user_id=event.broadcaster.id)
