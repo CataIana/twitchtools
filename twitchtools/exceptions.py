@@ -5,8 +5,8 @@ class TwitchToolsException(commands.CommandError):
     pass
 
 class BadAuthorization(TwitchToolsException):
-    def __init__(self):
-        super().__init__("Bad authorization! Please check your configuration.")
+    def __init__(self, message: str = None):
+        super().__init__(f"Bad authorization! Please check your configuration{f': {message}' if message else ''}")
 
 class BadRequest(TwitchToolsException):
     pass

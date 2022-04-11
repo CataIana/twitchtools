@@ -47,14 +47,17 @@ class http:
     async def _request(self, url, method="get", **kwargs):
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
         if response.status == 401: #Refresh access token
-            reauth = await self.session.post(
-                url=f"{self.oauth2_base}/token?\
-                    client_id={self.client_id}&\
-                    client_secret={self.client_secret}&\
-                    grant_type=client_credentials")
-            if reauth.status == 401:
-                raise BadAuthorization
+            reauth = await self.session.post(url=f"{self.oauth2_base}/token", data={
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type": "client_credentials"
+            })
+            if reauth.status in [401, 400]:
+                reauth_data = await reauth.json()
+                raise BadAuthorization(reauth_data["message"])
             reauth_data = await reauth.json()
+            async with aiofiles.open("config/auth.json") as f:
+                self.bot.auth = json.loads(await f.read())
             self.bot.auth["access_token"] = reauth_data["access_token"]
             async with aiofiles.open(self.storage, "w") as f:
                 await f.write(json.dumps(self.bot.auth, indent=4))
