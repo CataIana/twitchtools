@@ -1,6 +1,6 @@
 from disnake.ext import commands
 from twitchtools import TitleEvent, Stream, User, PartialUser
-
+import asyncio
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
@@ -9,13 +9,13 @@ class QueueWorker(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
-        self.worker = self.bot.loop.create_task(self.worker())
+        self.worker = self.bot.loop.create_task(self._worker())
         self.status_cog = self.bot.get_cog("StreamStatus")
 
     def cog_unload(self):
         self.worker.cancel()
 
-    async def worker(self):
+    async def _worker(self):
         self.bot.log.debug("Queue Worker Started")
         while not self.bot.is_closed():
             item: Union[Stream, User, TitleEvent] = await self.bot.queue.get()
@@ -23,21 +23,33 @@ class QueueWorker(commands.Cog):
             if self.status_cog is None:
                 self.status_cog = self.bot.get_cog("StreamStatus")
                 if self.status_cog is None:
-                    self.bot.critical("Unable to find status cog to dispatch events!")
+                    self.bot.log.critical("Unable to find status cog to dispatch events!")
                     self.bot.queue.task_done()
             if isinstance(item, Stream): # Stream online
                 if self.status_cog:
-                    await self.status_cog.on_streamer_online(item)
+                    #await self.status_cog.on_streamer_online(item)
+                    try:
+                        await asyncio.wait_for(self.status_cog.on_streamer_online(item), timeout=10)
+                    except asyncio.TimeoutError:
+                        pass
                 self.bot.dispatch("streamer_online", item)
 
             elif isinstance(item, (User, PartialUser)): # Stream offline
                 if self.status_cog:
-                    await self.status_cog.on_streamer_offline(item)
+                    #await self.status_cog.on_streamer_offline(item)
+                    try:
+                        await asyncio.wait_for(self.status_cog.on_streamer_offline(item), timeout=10)
+                    except asyncio.TimeoutError:
+                        pass
                 self.bot.dispatch("streamer_offline", item)
 
             elif isinstance(item, TitleEvent): # Title Change
                 if self.status_cog:
-                    await self.status_cog.on_title_change(item)
+                    #await self.status_cog.on_title_change(item)
+                    try:
+                        await asyncio.wait_for(self.status_cog.on_title_change(item), timeout=10)
+                    except asyncio.TimeoutError:
+                        pass
                 self.bot.dispatch("title_change", item)
 
             else:
