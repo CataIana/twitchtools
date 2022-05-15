@@ -315,7 +315,8 @@ class RecieverCommands(commands.Cog):
                         alert_role: Role = commands.Param(default=None, description="The role to be pinged for alerts"),
                         status_channel: TextChannel = commands.Param(default=None, description="Only for Mode 2: The channel that is renamed when streamer goes live/offline"),
                         title_phrase: str = commands.Param(default=None, description="Alerts are only sent if the phrase provided is in the title of the stream. CASE INSENSITIVE"),
-                        disable_channel_rename: bool = commands.Param(default=False, description="Only for Mode 2: Disables renaming of channel when going live/offline.")
+                        disable_channel_rename: bool = commands.Param(default=False, description="Only for Mode 2: Disables renaming of channel when going live/offline."),
+                        use_detailed_time: bool = commands.Param(default=False, description="Show a detailed start and end time in stream offline embeds. Time is in CEST")
         ):
         # Run checks on all the supplied arguments
         streamer = await self.check_streamer(username=streamer_username)
@@ -355,6 +356,8 @@ class RecieverCommands(commands.Cog):
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["title_phrase"] = title_phrase.lower()
         if disable_channel_rename and alert_mode == 2:
             callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["disable_channel_rename"] = disable_channel_rename
+        if use_detailed_time:
+            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["detailed_time"] = True
 
         await self.write_callbacks(callbacks)
 

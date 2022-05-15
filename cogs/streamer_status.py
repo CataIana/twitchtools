@@ -5,6 +5,7 @@ from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, huma
 from time import time
 from math import floor
 from typing import Union
+from dateutil.tz import gettz
 
 
 from typing import TYPE_CHECKING
@@ -155,7 +156,14 @@ class StreamStatus(commands.Cog):
                             embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
-                            embed.description = f"Was streaming {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
+                            time_now = utcnow()
+                            detailed_length = ""
+                            if callbacks[streamer.username]["alert_roles"][str(channel.guild.id)].get("detailed_time", None) == True:
+                                cest_tz = gettz("CET")
+                                start_time = embed.timestamp.astimezone(cest_tz).strftime("%d-%m-%Y %H:%M:%S %Z")
+                                end_time = time_now.astimezone(cest_tz).strftime("%d-%m-%Y %H:%M:%S %Z")
+                                detailed_length = f"\n**Start Time:** {start_time}\n**End Time:** {end_time}"
+                            embed.description = f"Was streaming {extracted_game} for ~{human_timedelta(time_now, source=embed.timestamp, accuracy=2)}{detailed_length}"
                             try:
                                 await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
                                 #await message.edit(content=f"{message.content.split(' is', 1)[0]} was live on Twitch", embed=embed)
