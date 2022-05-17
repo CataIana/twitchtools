@@ -160,9 +160,9 @@ class StreamStatus(commands.Cog):
                             detailed_length = ""
                             if callbacks[streamer.username]["alert_roles"][str(channel.guild.id)].get("detailed_time", None) == True:
                                 cest_tz = gettz("CET")
-                                start_time = embed.timestamp.astimezone(cest_tz).strftime("%d-%m-%Y %H:%M:%S %Z")
-                                end_time = time_now.astimezone(cest_tz).strftime("%d-%m-%Y %H:%M:%S %Z")
-                                detailed_length = f"\n**Start Time:** {start_time}\n**End Time:** {end_time}"
+                                start_time = embed.timestamp.astimezone(cest_tz).strftime("%H:%M")
+                                end_time = time_now.astimezone(cest_tz).strftime("%H:%M %Z")
+                                detailed_length = f"\n{start_time} - {end_time}"
                             embed.description = f"Was streaming {extracted_game} for ~{human_timedelta(time_now, source=embed.timestamp, accuracy=2)}{detailed_length}"
                             try:
                                 await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
