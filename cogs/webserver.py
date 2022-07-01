@@ -130,6 +130,8 @@ class RecieverWebServer:
         stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
 
         live = stream is not None
+        if self.allow_unverified_requests:
+            live = True if data["subscription"]["type"] == "stream.online" else False
 
         
         if live:

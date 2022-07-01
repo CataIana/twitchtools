@@ -31,7 +31,7 @@ class QueueWorker(commands.Cog):
                     try:
                         await asyncio.wait_for(self.status_cog.on_streamer_online(item), timeout=10)
                     except asyncio.TimeoutError:
-                        pass
+                        await self.bot.log.warn(f"Queue event {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("streamer_online", item)
 
             elif isinstance(item, (User, PartialUser)): # Stream offline
@@ -40,7 +40,7 @@ class QueueWorker(commands.Cog):
                     try:
                         await asyncio.wait_for(self.status_cog.on_streamer_offline(item), timeout=10)
                     except asyncio.TimeoutError:
-                        pass
+                        await self.bot.log.warn(f"Queue event {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("streamer_offline", item)
 
             elif isinstance(item, TitleEvent): # Title Change
@@ -49,7 +49,7 @@ class QueueWorker(commands.Cog):
                     try:
                         await asyncio.wait_for(self.status_cog.on_title_change(item), timeout=10)
                     except asyncio.TimeoutError:
-                        pass
+                        await self.bot.log.warn(f"Queue object with type {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("title_change", item)
 
             else:
