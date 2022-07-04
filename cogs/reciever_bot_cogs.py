@@ -58,6 +58,8 @@ def has_manage_permissions() -> Callable[[T], T]:
             if manager_role in ctx.author.roles:
                 return True
 
+        raise commands.CheckFailure("You do not have permission to run this command. Only server administrators or users with the manager role can run commands. If you believe this is a mistake, ask your admin about the `/managerrole` command")
+
     return commands.check(predicate)
 
 def has_guild_permissions(owner_override: bool = False, **perms: bool) -> Callable[[T], T]:
@@ -347,11 +349,11 @@ class RecieverCommands(commands.Cog):
     async def manager_get(self, ctx: ApplicationCustomContext):
         role_id = await get_manager_role(ctx.guild)
         if not role_id:
-            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**")
         role = ctx.guild.get_role(role_id)
         if not role:
-            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
-        await ctx.send(f"The manager role for **{ctx.guild.name}** is **{role.name}**", ephemeral=True)
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**")
+        await ctx.send(f"The manager role for **{ctx.guild.name}** is **{role.name}**")
 
     @manager_role.sub_command(name="set", description="Define a manager role that allows a role to use the bot commands")
     async def manager_set(self, ctx: ApplicationCustomContext, role: Role):
@@ -361,7 +363,7 @@ class RecieverCommands(commands.Cog):
     @manager_role.sub_command(name="remove", description="Remove the manager role if it has been set")
     async def manager_remove(self, ctx: ApplicationCustomContext):
         if not await get_manager_role(ctx.guild):
-            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**", ephemeral=True)
+            return await ctx.send(f"No manager role is set for **{ctx.guild.name}**")
         await write_manager_role(ctx.guild, role=None)
         await ctx.send(f"Removed the manager role for **{ctx.guild.name}**")
 

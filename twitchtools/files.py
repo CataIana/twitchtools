@@ -91,7 +91,7 @@ async def write_manager_role(guild: Guild, role: Role = None) -> None:
         os.mkdir("config")
     try:
         async with aiofiles.open("config/manager_roles.json") as f:
-            return json.loads(await f.read())
+            data = json.loads(await f.read())
     except FileNotFoundError:
         data = {}
     except json.decoder.JSONDecodeError:

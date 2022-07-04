@@ -164,17 +164,19 @@ class StreamStatus(commands.Cog):
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
                             if "games" in channel_cache[streamer.username]:
-                                self.bot.log.debug(channel_cache[streamer.username]["games"])
                                 games = channel_cache[streamer.username]["games"] # Limit to last 5 games
-                                sliced_games = {key: games[key] for key in list(games.keys())[:5]}
-                                sliced_games[list(sliced_games.keys())[-1]] += int(time()) - channel_cache[streamer.username]["last_update"]
-                                past_games = []
-                                for game_name, length in sliced_games.items():
-                                    if length == 0:
-                                        continue
-                                    past_games.append(f"{game_name} for {human_timedelta(embed.timestamp+timedelta(seconds=length), source=embed.timestamp, accuracy=2)}")
-                                extra = " (5 most recent)" if len(games) > 5 else ""
-                                past_games = f"Was streaming{extra}:" + "\n" + ',\n'.join(past_games)
+                                if len(games) == 1:
+                                    past_games = f"Was streaming {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
+                                else:
+                                    sliced_games = {key: games[key] for key in list(games.keys())[:5]}
+                                    sliced_games[list(sliced_games.keys())[-1]] += int(time()) - channel_cache[streamer.username]["last_update"]
+                                    past_games = []
+                                    for game_name, length in sliced_games.items():
+                                        if length == 0:
+                                            continue
+                                        past_games.append(f"{game_name} for ~{human_timedelta(embed.timestamp+timedelta(seconds=length), source=embed.timestamp, accuracy=2)}")
+                                    extra = " (5 most recent)" if len(games) > 5 else ""
+                                    past_games = f"Was streaming{extra}:" + "\n" + ',\n'.join(past_games)
                             else:
                                 #Fallback
                                 self.bot.log.warning("Using fallback game extraction")
