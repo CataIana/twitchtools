@@ -9,7 +9,7 @@ from time import time
 import logging
 import json
 import sys
-from twitchtools import PartialUser, AlertOrigin, get_callbacks
+from twitchtools import PartialUser, AlertOrigin, get_callbacks, write_callbacks
 from twitchtools.connection_state import CustomConnectionState
 from typing import TypeVar, Type, Any
 from enum import Enum
@@ -96,15 +96,19 @@ class TwitchCallBackBot(commands.InteractionBot):
         callbacks = await get_callbacks() #Get callback dict
         if not callbacks:
             return
-        streams = await self.api.get_streams(user_ids=[c["channel_id"] for c in callbacks.values()], origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
-        online_streams = [stream.user.id for stream in streams] #We only need the ID from them
-        for streamer, data in callbacks.items(): #Iterate through all callbacks and update all streamers
-            if data["channel_id"] in online_streams:
-                self.queue.put_nowait([x for x in streams if x.user.id == data["channel_id"]][0])
-                #self.dispatch("streamer_online", [x for x in streams if x.user.id == data["channel_id"]][0])
+        streams = await self.api.get_streams(user_ids=list(callbacks.keys()), origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
+        online_streams = [str(stream.user.id) for stream in streams] #We only need the ID from them
+        for streamer_id, data in callbacks.items(): #Iterate through all callbacks and update all streamers
+            if streamer_id in online_streams:
+                stream = [s for s in streams if s.user.id == int(streamer_id)][0]
+                if data["display_name"] != stream.user.display_name:
+                    callbacks[streamer_id]["display_name"] = stream.user.display_name
+                    await write_callbacks(callbacks)
+                self.queue.put_nowait(stream)
             else:
-                #self.dispatch("streamer_offline", PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
-                self.queue.put_nowait(PartialUser(user_id=data["channel_id"], user_login=streamer, display_name=streamer))
+                self.queue.put_nowait(PartialUser(user_id=streamer_id, user_login=data["display_name"].lower(), display_name=data["display_name"]))
+
+                
     
 
 if __name__ == "__main__":

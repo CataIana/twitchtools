@@ -19,6 +19,7 @@ from enum import Enum
 from main import TwitchCallBackBot
 from twitchtools import SubscriptionType, User, PartialUser, Stream, ApplicationCustomContext, AlertOrigin, Confirm
 from twitchtools import TextPaginator, human_timedelta, get_manager_role, write_manager_role, get_callbacks, write_callbacks, get_title_callbacks, write_title_callbacks, get_channel_cache, write_channel_cache
+from twitchtools import AlertFileType, AlertType
 from twitchtools.exceptions import SubscriptionError
 from typing import Union, Callable, TypeVar
 from types import CoroutineType
@@ -431,7 +432,7 @@ class RecieverCommands(commands.Cog):
 
         #Create file structure and subscriptions if necessary
         callbacks = await get_callbacks()
-        if callbacks.get(streamer.username, {}).get("alert_roles", {}).get(str(ctx.guild.id), None):
+        if callbacks.get(str(streamer.id), {}).get("alert_roles", {}).get(str(ctx.guild.id), None):
             view = Confirm(ctx)
             await ctx.response.send_message(f"{streamer.username} is already setup for this server! Do you want to override the current settings?", view=view)
             await view.wait()
@@ -446,21 +447,21 @@ class RecieverCommands(commands.Cog):
         
         
         make_subscriptions = False
-        if streamer.username not in callbacks.keys():
+        if str(streamer.id) not in callbacks.keys():
             make_subscriptions = True
-            callbacks[streamer.username] = {"channel_id": streamer.id, "secret": await random_string_generator(21), "alert_roles": {}}
+            callbacks[str(streamer.id)] = {"display_name": streamer.display_name, "secret": await random_string_generator(21), "alert_roles": {}}
 
-        callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"mode": mode, "notif_channel_id": notification_channel.id}
+        callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)] = {"mode": mode, "notif_channel_id": notification_channel.id}
         if alert_role == None:
-            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif alert_role == ctx.guild.default_role:
-            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
-            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
+            callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
         if mode == 2:
-            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
+            callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["channel_id"] = status_channel.id
         if custom_live_message:
-            callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["custom_message"] = custom_live_message
+            callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["custom_message"] = custom_live_message
 
         await write_callbacks(callbacks)
 
@@ -468,14 +469,14 @@ class RecieverCommands(commands.Cog):
             if not ctx.response.is_done():
                 await ctx.response.defer()
             try:
-                sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
-                callbacks[streamer.username]["online_id"] = sub1.id
-                sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[streamer.username]["secret"])
-                callbacks[streamer.username]["offline_id"] = sub2.id
-                sub3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callbacks[streamer.username]["secret"], _type="titlecallback")
-                callbacks[streamer.username]["title_id"] = sub3.id
+                sub1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callbacks[str(streamer.id)]["secret"], alert_type=AlertType.status)
+                callbacks[str(streamer.id)]["online_id"] = sub1.id
+                sub2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callbacks[str(streamer.id)]["secret"], alert_type=AlertType.status)
+                callbacks[str(streamer.id)]["offline_id"] = sub2.id
+                sub3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callbacks[str(streamer.id)]["secret"], alert_type=AlertType.title)
+                callbacks[str(streamer.id)]["title_id"] = sub3.id
             except SubscriptionError as e:
-                await self.callback_deletion(ctx, streamer.username, config_file="callbacks.json")
+                await self.callback_deletion(ctx, streamer, alert_type=AlertType.status)
                 raise SubscriptionError(str(e))
 
         await write_callbacks(callbacks)
@@ -515,7 +516,7 @@ class RecieverCommands(commands.Cog):
 
         pages = []
         page = [f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
-        for streamer, alert_info in dict(sorted(callbacks.items(), key=lambda x: x[0])).items():
+        for streamer_id, alert_info in dict(sorted(callbacks.items(), key=lambda packed_items: packed_items[1]['display_name'])).items(): # The lambda pases the 2 items as a tuple, read the alert_info and return display name
             if str(ctx.guild.id) in alert_info["alert_roles"].keys():
                 info = alert_info["alert_roles"][str(ctx.guild.id)]
                 alert_role = info.get("role_id", None)
@@ -541,11 +542,11 @@ class RecieverCommands(commands.Cog):
                 else:
                     channel_override = ""
 
-                last_live = cache.get(streamer, {}).get("alert_cooldown", "Unknown")
+                last_live = cache.get(streamer_id, {}).get("alert_cooldown", "Unknown")
                 if type(last_live) == int:
                     last_live = datetime.utcfromtimestamp(last_live).strftime("%d-%m-%y %H:%M")
 
-                page.append(f"{streamer:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                page.append(f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
                 if len(page) == 14:
                     if pages == []:
                         pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
@@ -572,7 +573,7 @@ class RecieverCommands(commands.Cog):
 
         pages = []
         page = [f"```nim\n{'Channel':15s} {'Alert Role':35s} {'Alert Channel':18s}"]
-        for streamer, alert_info in dict(sorted(title_callbacks.items(), key=lambda x: x[0])).items():
+        for streamer_id, alert_info in dict(sorted(title_callbacks.items(), key=lambda x: x[0])).items():
             if str(ctx.guild.id) in alert_info["alert_roles"].keys():
                 info = alert_info["alert_roles"][str(ctx.guild.id)]
                 alert_role = info.get("role_id", "")
@@ -597,7 +598,7 @@ class RecieverCommands(commands.Cog):
                 else:
                     alert_channel = ""
 
-                page.append(f"{streamer:15s} {alert_role:35s} {alert_channel:18s}")
+                page.append(f"{alert_info['display_name']:15s} {alert_role:35s} {alert_channel:18s}")
                 if len(page) == 14:
                     if pages == []:
                         pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
@@ -633,16 +634,16 @@ class RecieverCommands(commands.Cog):
         #Create file structure and subscriptions if necessary
         title_callbacks = await get_title_callbacks()
         
-        if streamer.username not in title_callbacks.keys():
-            title_callbacks[streamer.username] = {"channel_id": streamer.id, "alert_roles": {}}
+        if str(streamer.id) not in title_callbacks.keys():
+            title_callbacks[str(streamer.id)] = {"channel_id": streamer.id, "alert_roles": {}}
             
-        title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
+        title_callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)] = {"notif_channel_id": notification_channel.id}
         if alert_role == None:
-            title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
+            title_callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = None
         elif alert_role == ctx.guild.default_role:
-            title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
+            title_callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = "everyone"
         else:
-            title_callbacks[streamer.username]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
+            title_callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]["role_id"] = alert_role.id
 
         await write_title_callbacks(title_callbacks)
 
@@ -654,7 +655,7 @@ class RecieverCommands(commands.Cog):
 
     async def streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
         callbacks = await get_callbacks()
-        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
+        return [alert_info['display_name'].lower() for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
 
     @commands.slash_command()
     @has_manage_permissions()
@@ -664,12 +665,13 @@ class RecieverCommands(commands.Cog):
         """
         callbacks = await get_callbacks()
         channel_cache = await get_channel_cache()
-        for channel_id in channel_cache.get(streamer, {}).get("live_channels", []):
+        streamer_obj = await self.bot.api.get_user(user_login=streamer)
+        for channel_id in channel_cache.get(str(streamer_obj.id), {}).get("live_channels", []):
             channel = self.bot.get_channel(channel_id)
             if channel:
                 if channel.guild == ctx.guild:
                     try:
-                        if callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
+                        if callbacks[str(streamer_obj.id)]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
                             await channel.delete()
                         # elif callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         #     await channel.edit(name="stream-offline")
@@ -678,16 +680,16 @@ class RecieverCommands(commands.Cog):
                     except disnake.HTTPException:
                         continue
         try:
-            del channel_cache[streamer]
+            del channel_cache[str(streamer_obj.id)]
         except KeyError:
             pass
         await write_channel_cache(channel_cache)
-        await self.callback_deletion(ctx, streamer.lower(), config_file="callbacks.json", _type="status")
+        await self.callback_deletion(ctx, streamer_obj, alert_type=AlertType.status)
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     async def streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
         callbacks = await get_title_callbacks()
-        return [streamer for streamer, alert_info in callbacks.items() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and streamer.startswith(user_input)][:25]
+        return [alert_info['display_name'].lower() for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
 
     @commands.slash_command()
     @has_manage_permissions()
@@ -695,36 +697,39 @@ class RecieverCommands(commands.Cog):
         """
         Remove title change alerts for a streamer
         """
-        await self.callback_deletion(ctx, streamer.lower(), config_file="title_callbacks.json", _type="title")
+        streamer_obj = await self.bot.api.get_user(user_login=streamer)
+        await self.callback_deletion(ctx, streamer_obj, alert_type=AlertType.title)
         await ctx.send(f"{self.bot.emotes.success} Deleted title change alert for {streamer}")
 
-    async def callback_deletion(self, ctx: ApplicationCustomContext, streamer, config_file, _type="status"):
+    async def callback_deletion(self, ctx: ApplicationCustomContext, streamer: User, alert_type: AlertType = AlertType.status):
+        config_file = AlertFileType[alert_type.name]
         try:
-            async with aiofiles.open(f"config/{config_file}") as f:
+            async with aiofiles.open(f"config/{config_file.value}") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
             callbacks = {}
         except JSONDecodeError:
             callbacks = {}
         try:
-            del callbacks[streamer]["alert_roles"][str(ctx.guild.id)]
+            del callbacks[str(streamer.id)]["alert_roles"][str(ctx.guild.id)]
         except KeyError:
             raise commands.BadArgument("Streamer not found for server")
-        if callbacks[streamer]["alert_roles"] == {}:
+        if callbacks[str(streamer.id)]["alert_roles"] == {}:
             self.bot.log.info(f"Streamer {streamer} has no more alerts, purging")
             try:
-                if _type == "status":
-                    await self.bot.api.delete_subscription(callbacks[streamer]["offline_id"])
-                    await self.bot.api.delete_subscription(callbacks[streamer]["online_id"])
-                    await self.bot.api.delete_subscription(callbacks[streamer]["title_id"])
+                if alert_type == AlertType.status:
+                    await self.bot.api.delete_subscription(callbacks[str(streamer.id)]["offline_id"])
+                    await self.bot.api.delete_subscription(callbacks[str(streamer.id)]["online_id"])
+                    await self.bot.api.delete_subscription(callbacks[str(streamer.id)]["title_id"])
             except KeyError:
                 pass
-            del callbacks[streamer]
-            channel_cache = await get_channel_cache()
-            if channel_cache.get(streamer, None):
-                del channel_cache[streamer]
-                await write_channel_cache(channel_cache)
-        async with aiofiles.open(f"config/{config_file}", "w") as f:
+            del callbacks[str(streamer.id)]
+            if alert_type == AlertType.status:
+                channel_cache = await get_channel_cache()
+                if channel_cache.get(str(streamer.id), None):
+                    del channel_cache[str(streamer.id)]
+                    await write_channel_cache(channel_cache)
+        async with aiofiles.open(f"config/{config_file.value}", "w") as f:
             await f.write(json.dumps(callbacks, indent=4))
 
     @commands.slash_command(description="Owner Only: Test if callback is functioning correctly")
@@ -752,22 +757,23 @@ class RecieverCommands(commands.Cog):
         for subscription in all_subs:
             if subscription.type in [SubscriptionType.STREAM_ONLINE, SubscriptionType.STREAM_OFFLINE, SubscriptionType.CHANNEL_UPDATE]:
                 await self.bot.api.delete_subscription(subscription.id)
-        for streamer, data in callbacks.items():
+        for streamer_id, data in callbacks.items():
+            streamer = PartialUser(user_id=streamer_id, user_login=data['display_name'].lower(), display_name=data['display_name'])
             await asyncio.sleep(0.2)
             if data.get("online_id", None) is not None and data.get("online_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["online_id"])
-            rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
-            callbacks[streamer]["online_id"] = rj1.id
+            rj1 = await self.bot.api.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=data["secret"], alert_type=AlertType.status)
+            callbacks[str(streamer.id)]["online_id"] = rj1.id
             await asyncio.sleep(0.2)
             if data.get("offline_id", None) is not None and data.get("offline_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["offline_id"])
-            rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"])
-            callbacks[streamer]["offline_id"] = rj2.id
+            rj2 = await self.bot.api.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=data["secret"], alert_type=AlertType.status)
+            callbacks[str(streamer.id)]["offline_id"] = rj2.id
             await asyncio.sleep(0.2)
             if data.get("title_id", None) is not None and data.get("title_id", None) not in all_ids:
                 await self.bot.api.delete_subscription(data["title_id"])
-            rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=PartialUser(data["channel_id"], streamer, streamer), secret=data["secret"], _type="titlecallback")
-            callbacks[streamer]["title_id"] = rj3.id
+            rj3 = await self.bot.api.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=data["secret"], alert_type=AlertType.title)
+            callbacks[str(streamer.id)]["title_id"] = rj3.id
         await write_callbacks(callbacks)
         await ctx.send(f"{self.bot.emotes.success} Recreated live subscriptions!")
             

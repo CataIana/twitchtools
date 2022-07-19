@@ -73,11 +73,13 @@ class RecieverWebServer:
         except JSONDecodeError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
-        if channel not in callbacks.keys():
+        try:
+            channel_id = [id for id, c in callbacks.items() if c["display_name"].lower() == channel][0]
+        except IndexError:
             self.bot.log.info(f"Request for {channel} not found")
             return web.Response(status=400)
 
-        verified = await self.verify_request(request, callbacks[channel]["secret"])
+        verified = await self.verify_request(request, callbacks[channel_id]["secret"])
         if verified == False:
             self.bot.log.info("Unverified request, aborting")
             return web.Response(status=400)

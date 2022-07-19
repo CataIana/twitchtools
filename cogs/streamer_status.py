@@ -2,7 +2,7 @@ import disnake
 from disnake.ext import commands
 from disnake.utils import utcnow
 from twitchtools import Stream, TitleEvent, User, PartialUser, AlertOrigin, human_timedelta, Ratelimit, RateLimitExceeded
-from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache
+from twitchtools.files import get_title_callbacks, get_callbacks, get_title_cache, write_title_cache, get_channel_cache, write_channel_cache, write_callbacks
 from time import time
 from typing import Union
 from datetime import timedelta
@@ -22,8 +22,8 @@ class StreamStatus(commands.Cog):
         await self.bot.wait_until_ready()
         title_callbacks = await get_title_callbacks()
         title_cache = await get_title_cache()
-        old_title = title_cache.get(event.broadcaster.username, {}).get("cached_title", "<no title>") #Get cached information for streamer, or none
-        old_game = title_cache.get(event.broadcaster.username, {}).get("cached_game", "<no game>")
+        old_title = title_cache.get(str(event.broadcaster.id), {}).get("cached_title", "<no title>") #Get cached information for streamer, or none
+        old_game = title_cache.get(str(event.broadcaster.id), {}).get("cached_game", "<no game>")
 
         updated = [] #Quick way to make the dynamic embed title
         if event.title != old_title:
@@ -35,7 +35,7 @@ class StreamStatus(commands.Cog):
             self.bot.log.info(f"No title updates for {event.broadcaster.username}, ignoring")
             return
 
-        title_cache[event.broadcaster.username] = { #Update cached data
+        title_cache[str(event.broadcaster.id)] = { #Update cached data
             "cached_title": event.title,
             "cached_game": event.game,
         }
@@ -45,10 +45,10 @@ class StreamStatus(commands.Cog):
         stream = await self.bot.api.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
             #self.bot.log.info(f"{event.broadcaster.username} is live, ignoring title change")
-            if self.ratelimits.get(event.broadcaster.username, None) is None:
-                self.ratelimits[event.broadcaster.username] = Ratelimit(calls=10, period=600)
+            if self.ratelimits.get(str(event.broadcaster.id), None) is None:
+                self.ratelimits[str(event.broadcaster.id)] = Ratelimit(calls=10, period=600)
             try:
-                self.ratelimits[event.broadcaster.username].request()
+                self.ratelimits[str(event.broadcaster.id)].request()
             except RateLimitExceeded:
                 self.bot.log.info(f"Title update ratelimit for {event.broadcaster.username} exceeded!")
                 return
@@ -61,16 +61,16 @@ class StreamStatus(commands.Cog):
             embed.set_author(name=f"{event.broadcaster.display_name} is now live on Twitch!", url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=stream.user.avatar)
             embed.set_footer(text="Mew")
             # Add new game to games list if applicable
-            if "games" in channel_cache.get(event.broadcaster.username, {}).keys() and event.game != old_game:
-                old_time = channel_cache[event.broadcaster.username]["games"].get(event.game_name, 0)
-                if event.game_name in channel_cache[event.broadcaster.username]["games"].keys():
-                    channel_cache[event.broadcaster.username]["games"].pop(event.game_name, None)
-                if channel_cache[event.broadcaster.username]["games"].get(old_game, None) != None:
-                    channel_cache[event.broadcaster.username]["games"][old_game] = (int(time()) - channel_cache[event.broadcaster.username]["last_update"]) + old_time
-                channel_cache[event.broadcaster.username]["games"][event.game_name] = old_time
-                channel_cache[event.broadcaster.username]["last_update"] = int(time())
+            if "games" in channel_cache.get(str(event.broadcaster.id), {}).keys() and event.game != old_game:
+                old_time = channel_cache[str(event.broadcaster.id)]["games"].get(event.game_name, 0)
+                if event.game_name in channel_cache[str(event.broadcaster.id)]["games"].keys():
+                    channel_cache[str(event.broadcaster.id)]["games"].pop(event.game_name, None)
+                if channel_cache[str(event.broadcaster.id)]["games"].get(old_game, None) != None:
+                    channel_cache[str(event.broadcaster.id)]["games"][old_game] = (int(time()) - channel_cache[str(event.broadcaster.id)]["last_update"]) + old_time
+                channel_cache[str(event.broadcaster.id)]["games"][event.game_name] = old_time
+                channel_cache[str(event.broadcaster.id)]["last_update"] = int(time())
                 await write_channel_cache(channel_cache)
-            for m in channel_cache.get(event.broadcaster.username, {}).get("live_alerts", []):
+            for m in channel_cache.get(str(event.broadcaster.id), {}).get("live_alerts", []):
                 channel = self.bot.get_channel(m.get("channel", None))
                 if channel:
                     try:
@@ -82,7 +82,7 @@ class StreamStatus(commands.Cog):
                         pass
             return
 
-        if title_callbacks.get(event.broadcaster.username, None) is None:
+        if title_callbacks.get(str(event.broadcaster.id), None) is None:
             return
 
         user = await self.bot.api.get_user(user_id=event.broadcaster.id)
@@ -100,7 +100,7 @@ class StreamStatus(commands.Cog):
         self.bot.log.info(f"Sending title update for {event.broadcaster.username}")
 
         #Send embed to each defined channel
-        for data in title_callbacks[event.broadcaster.username]["alert_roles"].values():
+        for data in title_callbacks[str(event.broadcaster.id)]["alert_roles"].values():
             c = self.bot.get_channel(data["notif_channel_id"])
             if c is not None:
                 if data['role_id'] is None:
@@ -123,18 +123,18 @@ class StreamStatus(commands.Cog):
         if not callbacks:
             return
         # Check if there's anything to even be done, if not, just return
-        if channel_cache.get(streamer.username, {}).get("live_channels", None) is None and channel_cache.get(streamer.username, {}).get("live_alerts", None) is None:
+        if channel_cache.get(str(streamer.id), {}).get("live_channels", None) is None and channel_cache.get(str(streamer.id), {}).get("live_alerts", None) is None:
             return
         self.bot.log.info(f"Updating status to offline for {streamer}")
 
         # Iterate through all live channels, if applicable, either deleting them or renaming them to stream-offline depending on mode
-        for channel_id in channel_cache[streamer.username].get("live_channels", []):
+        for channel_id in channel_cache[str(streamer.id)].get("live_channels", []):
             channel = self.bot.get_channel(channel_id)
             if channel is not None:
                 try:
-                    if callbacks[streamer.username]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
+                    if callbacks[str(streamer.id)]["alert_roles"][str(channel.guild.id)]["mode"] == 0:
                         await channel.delete()
-                    elif callbacks[streamer.username]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
+                    elif callbacks[str(streamer.id)]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         await channel.edit(name="stream-offline")
                 except disnake.Forbidden:
                     continue
@@ -143,10 +143,10 @@ class StreamStatus(commands.Cog):
 
         
         # Delete live channel data after being used
-        channel_cache[streamer.username].pop("live_channels", None)
+        channel_cache[str(streamer.id)].pop("live_channels", None)
         
         # Just like channels, iterate through the sent live alerts, and make them past tense. 100% suseptible to edge cases
-        for alert_ids in channel_cache[streamer.username].get("live_alerts", []):
+        for alert_ids in channel_cache[str(streamer.id)].get("live_alerts", []):
             channel = self.bot.get_channel(alert_ids["channel"])
             if channel is not None:
                 try: #Try to get the live alerts message, skipping if not found
@@ -163,13 +163,13 @@ class StreamStatus(commands.Cog):
                             embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
-                            if "games" in channel_cache[streamer.username]:
-                                games = channel_cache[streamer.username]["games"] # Limit to last 5 games
+                            if "games" in channel_cache[str(streamer.id)]:
+                                games = channel_cache[str(streamer.id)]["games"] # Limit to last 5 games
                                 if len(games) == 1:
                                     past_games = f"Was streaming {extracted_game} for ~{human_timedelta(utcnow(), source=embed.timestamp, accuracy=2)}"
                                 else:
                                     sliced_games = {key: games[key] for key in list(games.keys())[:5]}
-                                    sliced_games[list(sliced_games.keys())[-1]] += int(time()) - channel_cache[streamer.username]["last_update"]
+                                    sliced_games[list(sliced_games.keys())[-1]] += int(time()) - channel_cache[str(streamer.id)]["last_update"]
                                     past_games = []
                                     for game_name, length in sliced_games.items():
                                         if length == 0:
@@ -191,12 +191,12 @@ class StreamStatus(commands.Cog):
                             self.bot.log.warning(f"Error editing message to offline in {channel.guild.name}")
         
         # Remove data once used
-        if channel_cache[streamer.username].get("live_alerts", []) != []:
-            channel_cache[streamer.username]["reusable_alerts"] = channel_cache[streamer.username]["live_alerts"]
-        channel_cache[streamer.username].pop("live_alerts", None)
-        channel_cache[streamer.username]["is_live"] = False
-        channel_cache[streamer.username].pop("games", None)
-        channel_cache[streamer.username].pop("last_update", None)
+        if channel_cache[str(streamer.id)].get("live_alerts", []) != []:
+            channel_cache[str(streamer.id)]["reusable_alerts"] = channel_cache[str(streamer.id)]["live_alerts"]
+        channel_cache[str(streamer.id)].pop("live_alerts", None)
+        channel_cache[str(streamer.id)]["is_live"] = False
+        channel_cache[str(streamer.id)].pop("games", None)
+        channel_cache[str(streamer.id)].pop("last_update", None)
 
         # Update cache
         await write_channel_cache(channel_cache)
@@ -208,22 +208,14 @@ class StreamStatus(commands.Cog):
 
     def is_live(self, channel_cache: dict, stream: Stream):
         # To reduce the likelyhood of strange errors, clarify this.
-        if channel_cache.get(stream.user.username, {}).get("is_live", False):
+        if channel_cache.get(str(stream.user.id), {}).get("is_live", False):
             return True
-        # c = dict(channel_cache.get(stream.user.username, {}))
-        # try:
-        #     del c["alert_cooldown"]
-        # except KeyError:
-        #     pass
-        # if c == {}:
-        #     return False
-        # return True
 
     async def on_streamer_online(self, stream: Stream):
         await self.bot.wait_until_ready()
         channel_cache = await get_channel_cache()
         callbacks = await get_callbacks()
-        on_cooldown = self.on_cooldown(channel_cache.get(stream.user.username, {}).get("alert_cooldown", 0))
+        on_cooldown = self.on_cooldown(channel_cache.get(str(stream.user.id), {}).get("alert_cooldown", 0))
 
         # Do not re-run this function is the streamer is already live
         if self.is_live(channel_cache, stream):
@@ -235,6 +227,10 @@ class StreamStatus(commands.Cog):
             self.bot.log.info(f"Cooldown active for {stream.user.username}, updating/recreating channels and restoring notification messages")
 
         self.bot.log.info(f"Updating status to online for {stream.user.username}")
+
+        if callbacks[str(stream.user.id)]["display_name"] != stream.user.display_name:
+            callbacks[str(stream.user.id)]["display_name"] = stream.user.display_name
+            await write_callbacks(callbacks)
 
         # Sending webhook if applicable
         await self.do_webhook(callbacks, stream)
@@ -261,7 +257,7 @@ class StreamStatus(commands.Cog):
         live_channels = []
         live_alerts = []
         reuse_done = False
-        for guild_id, alert_info in callbacks[stream.user.username]["alert_roles"].items():
+        for guild_id, alert_info in callbacks[str(stream.user.id)]["alert_roles"].items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
                 continue
@@ -290,8 +286,8 @@ class StreamStatus(commands.Cog):
                         pass
             elif not reuse_done:
                 self.bot.log.debug("Running alert reuse")
-                if channel_cache[stream.user.username].get("reusable_alerts", None) is not None:
-                    for alert in channel_cache[stream.user.username]["reusable_alerts"]:
+                if channel_cache[str(stream.user.id)].get("reusable_alerts", None) is not None:
+                    for alert in channel_cache[str(stream.user.id)]["reusable_alerts"]:
                         alert_channel_id = alert.get("channel", None)
                         alert_channel = self.bot.get_channel(alert_channel_id)
                         if alert_channel is not None:
@@ -347,20 +343,20 @@ class StreamStatus(commands.Cog):
                     self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}1")
         
         #Finally, combine all data into channel cache, and update the file
-        channel_cache[stream.user.username] = {"alert_cooldown": int(time()), "is_live": True, "live_channels": live_channels, "live_alerts": live_alerts, "last_update": int(time()), "games": {stream.game_name: 0}}
+        channel_cache[str(stream.user.id)] = {"alert_cooldown": int(time()), "user_login": stream.user.username, "is_live": True, "live_channels": live_channels, "live_alerts": live_alerts, "last_update": int(time()), "games": {stream.game_name: 0}}
 
         await write_channel_cache(channel_cache)
 
     async def do_webhook(self, callbacks: dict, stream: Stream):
-        if "webhook" in callbacks[stream.user.username].keys():
-            if "format" in callbacks[stream.user.username].keys():
-                format_ = callbacks[stream.user.username]["format"].format(stream).replace("\\n", "\n")
+        if "webhook" in callbacks[str(stream.user.id)].keys():
+            if "format" in callbacks[str(stream.user.id)].keys():
+                format_ = callbacks[str(stream.user.id)]["format"].format(stream).replace("\\n", "\n")
             else:
                 format_ = f"{stream.user.display_name} is live! Streaming {stream.game}!\nhttps://twitch.tv/{stream.user.username}"
-            if type(callbacks[stream.user.username]["webhook"]) == list:
-                webhooks = callbacks[stream.user.username]["webhook"]
+            if type(callbacks[str(stream.user.id)]["webhook"]) == list:
+                webhooks = callbacks[str(stream.user.id)]["webhook"]
             else:
-                webhooks = [callbacks[stream.user.username]["webhook"]]
+                webhooks = [callbacks[str(stream.user.id)]["webhook"]]
             for webhook in webhooks:
                 webhook_obj = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                 try:

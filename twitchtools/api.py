@@ -8,7 +8,7 @@ from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from .exceptions import *
 from .subscription import Subscription, SubscriptionEvent, TitleEvent
-from .enums import AlertOrigin, SubscriptionType
+from .enums import AlertOrigin, SubscriptionType, AlertType
 from .user import PartialUser, User
 from .stream import Stream
 from typing import Union, List
@@ -162,7 +162,7 @@ class http:
         if event_type == SubscriptionType.CHANNEL_UPDATE:
             return TitleEvent(**data)
 
-    async def create_subscription(self, subscription_type: SubscriptionType, streamer: Union[User, PartialUser], secret, _type="callback") -> Subscription:
+    async def create_subscription(self, subscription_type: SubscriptionType, streamer: Union[User, PartialUser], secret: str, alert_type: AlertType = AlertType.status) -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
                 json={
                     "type": subscription_type.value,
@@ -172,7 +172,7 @@ class http:
                     },
                     "transport": {
                         "method": "webhook",
-                        "callback": f"{self.callback_url}/{_type}/{streamer.username.lower()}",
+                        "callback": f"{self.callback_url}/{alert_type.value}/{streamer.username.lower()}",
                         "secret": secret
                     }
                 }, method="post")

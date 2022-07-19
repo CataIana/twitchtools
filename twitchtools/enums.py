@@ -71,6 +71,14 @@ class SubscriptionType(Enum):
     USER_AUTHORIZATION_REVOKE = "user.authorization.revoke"
     USER_UPDATE = "user.update"
 
+class AlertFileType(Enum):
+    title = "title_callbacks.json"
+    status = "callbacks.json"
+
+class AlertType(Enum):
+    title = "titlecallback"
+    status = "callback"
+
 class Languages(Enum):
     AA = "Afar"
     AB = "Abkhazian"
