@@ -264,3 +264,12 @@ class Languages(Enum):
     ZA = "Zhuang; Chuang"
     ZU = "Zulu"
     OTHER = "Other"
+
+class VideoType(Enum):
+    upload = "upload"
+    archive = "archive"
+    highlight = "highlight"
+
+class VideoPrivacy(Enum):
+    public = "public"
+    private = "private"

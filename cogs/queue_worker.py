@@ -1,9 +1,11 @@
 from disnake.ext import commands
 from twitchtools import TitleEvent, Stream, User, PartialUser
 import asyncio
+import async_timeout
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
+
 
 class QueueWorker(commands.Cog):
     def __init__(self, bot):
@@ -23,37 +25,48 @@ class QueueWorker(commands.Cog):
             if self.status_cog is None:
                 self.status_cog = self.bot.get_cog("StreamStatus")
                 if self.status_cog is None:
-                    self.bot.log.critical("Unable to find status cog to dispatch events!")
+                    self.bot.log.critical(
+                        "Unable to find status cog to dispatch events!")
                     self.bot.queue.task_done()
-            if isinstance(item, Stream): # Stream online
+            if isinstance(item, Stream):  # Stream online
                 if self.status_cog:
-                    #await self.status_cog.on_streamer_online(item)
+                    # await self.status_cog.on_streamer_online(item)
                     try:
-                        await asyncio.wait_for(self.status_cog.on_streamer_online(item), timeout=10)
+                        async with async_timeout.timeout(10) as tm:
+                            await self.status_cog.on_streamer_online(item)
                     except asyncio.TimeoutError:
+                        pass
+                    if tm.expired:
                         await self.bot.log.warn(f"Queue event {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("streamer_online", item)
 
-            elif isinstance(item, (User, PartialUser)): # Stream offline
+            elif isinstance(item, (User, PartialUser)):  # Stream offline
                 if self.status_cog:
-                    #await self.status_cog.on_streamer_offline(item)
+                    # await self.status_cog.on_streamer_offline(item)
                     try:
-                        await asyncio.wait_for(self.status_cog.on_streamer_offline(item), timeout=10)
+                        async with async_timeout.timeout(10) as tm:
+                            await self.status_cog.on_streamer_offline(item)
                     except asyncio.TimeoutError:
+                        pass
+                    if tm.expired:
                         await self.bot.log.warn(f"Queue event {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("streamer_offline", item)
 
-            elif isinstance(item, TitleEvent): # Title Change
+            elif isinstance(item, TitleEvent):  # Title Change
                 if self.status_cog:
-                    #await self.status_cog.on_title_change(item)
+                    # await self.status_cog.on_title_change(item)
                     try:
-                        await asyncio.wait_for(self.status_cog.on_title_change(item), timeout=10)
+                        async with async_timeout.timeout(10) as tm:
+                            await self.status_cog.on_title_change(item)
                     except asyncio.TimeoutError:
-                        await self.bot.log.warn(f"Queue object with type {type(item).__name__} took too long to execute!")
+                        pass
+                    if tm.expired:
+                        await self.bot.log.warn(f"Queue event {type(item).__name__} took too long to execute!")
                 self.bot.dispatch("title_change", item)
 
             else:
-                self.bot.log.warn(f"Recieved bad queue object with type \"{type(item).__name__}\"!")
+                self.bot.log.warn(
+                    f"Recieved bad queue object with type \"{type(item).__name__}\"!")
 
             self.bot.log.debug(f"Finished task {type(item).__name__}")
             self.bot.queue.task_done()

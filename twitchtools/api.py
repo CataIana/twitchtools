@@ -11,6 +11,7 @@ from .subscription import Subscription, SubscriptionEvent, TitleEvent
 from .enums import AlertOrigin, SubscriptionType, AlertType
 from .user import PartialUser, User
 from .stream import Stream
+from .video import Video
 from typing import Union, List
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
@@ -202,3 +203,26 @@ class http:
         if isinstance(subscription, Subscription):
             subscription = subscription.id
         return await self._request(f"{self.base}/eventsub/subscriptions?id={subscription}", method="delete")
+
+    async def get_videos(self, user: Union[User, PartialUser]) -> Video:
+        r = await self._request(f"{self.base}/videos?user_id={user.id}")
+        rj = await r.json()
+        vids = []
+        for vid in rj["data"]:
+            vids.append(Video(**vid))
+        return vids
+
+    async def get_video(self, video_id: int) -> Video:
+        r = await self._request(f"{self.base}/videos?id={video_id}")
+        rj = await r.json()
+        for vid in rj["data"]:
+            return Video(**vid)
+        return None
+
+    async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Video:
+        r = await self._request(f"{self.base}/videos?user_id={user.id}")
+        rj = await r.json()
+        for vid in rj["data"]:
+            if int(vid['stream_id']) == stream_id:
+                return Video(**vid)
+        return None

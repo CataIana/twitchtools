@@ -144,6 +144,10 @@ class StreamStatus(commands.Cog):
         
         # Delete live channel data after being used
         channel_cache[str(streamer.id)].pop("live_channels", None)
+
+        vod = None
+        if channel_cache[str(streamer.id)].get("stream_id", None):
+            vod = await self.bot.api.get_video_from_stream_id(streamer, channel_cache[str(streamer.id)]["stream_id"])
         
         # Just like channels, iterate through the sent live alerts, and make them past tense. 100% suseptible to edge cases
         for alert_ids in channel_cache[str(streamer.id)].get("live_alerts", []):
@@ -161,6 +165,8 @@ class StreamStatus(commands.Cog):
                     else:
                         try: #Replace the applicable strings with past tense phrasing
                             embed.set_author(name=f"{streamer.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
+                            if vod:
+                                embed.url = vod.url
                             #embed.set_author(name=embed.author.name.replace("is now live on Twitch!", "was live on Twitch!"), url=embed.author.url)
                             extracted_game = embed.description.split('Streaming ', 1)[1].split('\n')[0]
                             if "games" in channel_cache[str(streamer.id)]:
@@ -194,6 +200,7 @@ class StreamStatus(commands.Cog):
         if channel_cache[str(streamer.id)].get("live_alerts", []) != []:
             channel_cache[str(streamer.id)]["reusable_alerts"] = channel_cache[str(streamer.id)]["live_alerts"]
         channel_cache[str(streamer.id)].pop("live_alerts", None)
+        channel_cache[str(streamer.id)].pop("stream_id", None)
         channel_cache[str(streamer.id)]["is_live"] = False
         channel_cache[str(streamer.id)].pop("games", None)
         channel_cache[str(streamer.id)].pop("last_update", None)
@@ -343,7 +350,16 @@ class StreamStatus(commands.Cog):
                     self.bot.log.warning(f"Error fetching channel ID {alert_info['channel_id']} for {stream.user.username}1")
         
         #Finally, combine all data into channel cache, and update the file
-        channel_cache[str(stream.user.id)] = {"alert_cooldown": int(time()), "user_login": stream.user.username, "is_live": True, "live_channels": live_channels, "live_alerts": live_alerts, "last_update": int(time()), "games": {stream.game_name: 0}}
+        channel_cache[str(stream.user.id)] = {
+            "alert_cooldown": int(time()),
+            "user_login": stream.user.username,
+            "stream_id": stream.stream_id,
+            "is_live": True,
+            "live_channels": live_channels,
+            "live_alerts": live_alerts,
+            "last_update": int(time()),
+            "games": {stream.game_name: 0}
+        }
 
         await write_channel_cache(channel_cache)
 
