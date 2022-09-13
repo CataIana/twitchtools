@@ -1,6 +1,5 @@
 from disnake.ext import commands
 from twitchtools import TitleEvent, Stream, User, PartialUser
-import asyncio
 from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
@@ -10,6 +9,8 @@ class QueueHandler(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
+        # NEVER ASSIGN A TASK TO A VARIABLE AGAIN MYAAA.
+        # Caused a bug that would cause this worker to get stuck with no errors
         self.bot.loop.create_task(self.queue_handler())
         self.status_cog = self.bot.get_cog("StreamStatus")
 

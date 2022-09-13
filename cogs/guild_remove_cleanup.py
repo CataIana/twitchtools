@@ -20,33 +20,30 @@ class CallbackCleanup(commands.Cog):
         self.bot.log.info(f"Left guild {guild.name} :(")
         async for streamer, callback_info in self.bot.db.async_get_all_callbacks():
             if str(guild.id) in callback_info["alert_roles"].keys():
-                try:
-                    del callback_info["alert_roles"][str(guild.id)]
-                    if callback_info["alert_roles"] == {}:
-                        self.bot.log.info(
-                            f"Streamer {callback_info['display_name']} has no more alerts, purging")
-                        await self.bot.api.delete_subscription(callback_info['offline_id'])
-                        await self.bot.api.delete_subscription(callback_info['online_id'])
-                        await self.bot.api.delete_subscription(callback_info['title_id'])
-                        await self.bot.wait_until_db_ready()
-                        await self.bot.db.delete_channel_cache(streamer)
-                        await self.bot.db.delete_callback(streamer)
-                except KeyError:  # Idk if it somehow errors lol, just ignore
-                    continue
+                del callback_info["alert_roles"][str(guild.id)]
+                if callback_info["alert_roles"] == {}:
+                    self.bot.log.info(
+                        f"Streamer {callback_info['display_name']} has no more alerts, purging")
+                    await self.bot.api.delete_subscription(callback_info['offline_id'])
+                    await self.bot.api.delete_subscription(callback_info['online_id'])
+                    await self.bot.api.delete_subscription(callback_info['title_id'])
+                    await self.bot.wait_until_db_ready()
+                    await self.bot.db.delete_channel_cache(streamer)
+                    await self.bot.db.delete_callback(streamer)
+                else:
+                    await self.bot.db.write_callback(streamer, callback_info)
 
         async for streamer, callback_info in self.bot.db.async_get_all_title_callbacks():
             if str(guild.id) in callback_info["alert_roles"].keys():
-                try:
                     del callback_info["alert_roles"][str(guild.id)]
                     if callback_info["alert_roles"] == {}:
                         self.bot.log.info(
                             f"Streamer {callback_info['display_name']} has no more alerts, purging")
-                        # await self.bot.api.delete_subscription(callbacks[streamer]['subscription_id'])
                         await self.bot.wait_until_db_ready()
                         await self.bot.db.delete_title_cache(streamer)
                         await self.bot.db.delete_title_callback(streamer)
-                except KeyError:  # Idk if it somehow errors lol, just ignore
-                    continue
+                    else:
+                        await self.bot.db.write_callback(streamer, callback_info)
 
 
 def setup(bot):
