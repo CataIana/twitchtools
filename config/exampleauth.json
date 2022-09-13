@@ -1,7 +1,8 @@
 {
-    "client_id": "Twitch client ID",
-    "client_secret": "Twitch client secret",
-    "access_token": "This value will automatically be filled.",
-    "bot_token": "Discord bot token",
-    "callback_url": "Your callback url. Example: https://example.com"
+  "client_id": "Twitch client ID",
+  "client_secret": "Twitch client secret",
+  "bot_token": "Discord bot token",
+  "callback_url": "Your callback url. Example: https://example.com",
+  "mongodb_uri": "mongodb://localhost",
+  "webserver_port": 18271
 }

@@ -1,8 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-import aiofiles
 import asyncio
-import json
 from disnake import HTTPException
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
@@ -12,31 +9,28 @@ from .enums import AlertOrigin, SubscriptionType, AlertType
 from .user import PartialUser, User
 from .stream import Stream
 from .video import Video
-from typing import Union, List
+from typing import TYPE_CHECKING, Union, List, Optional
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
+
 class http:
-    def __init__(self, bot, auth_file):
+    def __init__(self, bot, client_id, client_secret, callback_url, **kwargs):
         self.bot: TwitchCallBackBot = bot
         self.base = "https://api.twitch.tv/helix"
         self.oauth2_base = "https://id.twitch.tv/oauth2"
-        self.storage = auth_file
         try:
-            with open(auth_file) as f:
-                a = json.load(f)
-        except FileNotFoundError:
-            raise BadAuthorization
-        except json.decoder.JSONDecodeError:
-            raise BadAuthorization
-        try:
-            self.client_id = a["client_id"]
-            self.client_secret = a["client_secret"]
-            self.access_token = a["access_token"]
-            self.callback_url = a["callback_url"]
+            self.client_id: str = client_id
+            self.client_secret: str = client_secret
+            self.access_token: str = None
+            self.callback_url: str = callback_url
         except KeyError:
             raise BadAuthorization
         self.bot.add_listener(self._make_session, 'on_connect')
+        self.bot.add_listener(self._fetch_access_token, 'on_connect')
+
+    async def _fetch_access_token(self) -> str:
+        self.access_token = await self.bot.db.get_access_token()
 
     @property
     def headers(self) -> dict:
@@ -47,7 +41,7 @@ class http:
 
     async def _request(self, url, method="get", **kwargs):
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
-        if response.status == 401: #Refresh access token
+        if response.status == 401:  # Refresh access token
             reauth = await self.session.post(url=f"{self.oauth2_base}/token", data={
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
@@ -57,12 +51,8 @@ class http:
                 reauth_data = await reauth.json()
                 raise BadAuthorization(reauth_data["message"])
             reauth_data = await reauth.json()
-            async with aiofiles.open("config/auth.json") as f:
-                self.bot.auth = json.loads(await f.read())
-            self.bot.auth["access_token"] = reauth_data["access_token"]
-            async with aiofiles.open(self.storage, "w") as f:
-                await f.write(json.dumps(self.bot.auth, indent=4))
             self.access_token = reauth_data['access_token']
+            await self.bot.db.write_access_token(self.access_token)
             response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
         return response
 
@@ -85,10 +75,10 @@ class http:
             json_data = (await r.json())["data"]
             for user_json in json_data:
                 users += User(**user_json)
-            
+
         return users
 
-    async def get_user(self, user: PartialUser = None, user_id=None, user_login=None) -> Union[User, None]:
+    async def get_user(self, user: PartialUser = None, user_id: int = None, user_login: str = None) -> Optional[User]:
         if user is not None:
             r = await self._request(f"{self.base}/users?id={user.id}")
         elif user_id is not None:
@@ -123,7 +113,6 @@ class http:
                 s = Stream(**stream)
                 s.origin = origin
                 streams.append(s)
-            
         return streams
 
     async def get_stream(self, user: Union[PartialUser, User, str], origin: AlertOrigin = AlertOrigin.unavailable) -> Union[Stream, None]:
@@ -165,37 +154,40 @@ class http:
 
     async def create_subscription(self, subscription_type: SubscriptionType, streamer: Union[User, PartialUser], secret: str, alert_type: AlertType = AlertType.status) -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
-                json={
-                    "type": subscription_type.value,
-                    "version": "1",
-                    "condition": {
-                        "broadcaster_user_id": str(streamer.id)
-                    },
-                    "transport": {
-                        "method": "webhook",
-                        "callback": f"{self.callback_url}/{alert_type.value}/{streamer.username.lower()}",
-                        "secret": secret
-                    }
-                }, method="post")
+                                       json={
+                                           "type": subscription_type.value,
+                                           "version": "1",
+                                           "condition": {
+                                               "broadcaster_user_id": str(streamer.id)
+                                           },
+                                           "transport": {
+                                               "method": "webhook",
+                                               "callback": f"{self.callback_url}/{alert_type.value}/{streamer.username.lower()}",
+                                               "secret": secret
+                                           }
+                                       }, method="post")
 
         if response.status not in [202, 409]:
-            raise SubscriptionError(f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
+            raise SubscriptionError(
+                f"There was an error subscribing to the stream online eventsub. Please try again later. Error code: {response.status}")
         j = await response.json()
         try:
             json_data = j["data"][0]
         except KeyError:
             self.bot.log.error(f"Subscription Create Error: {str(j)}")
-            raise SubscriptionError(f"There was an error creating the {subscription_type.value} subscription: `{str(j)}`")
+            raise SubscriptionError(
+                f"There was an error creating the {subscription_type.value} subscription: `{str(j)}`")
         subscription = Subscription(**json_data)
 
-        #Wait for subscription confirmation
+        # Wait for subscription confirmation
         def check(sub_id):
             return sub_id == subscription.id
         try:
             await self.bot.wait_for("subscription_confirmation", check=check, timeout=8)
         except asyncio.TimeoutError:
             await self.delete_subscription(subscription.id)
-            raise SubscriptionError("Did not receive subscription confirmation! Please try again later")
+            raise SubscriptionError(
+                "Did not receive subscription confirmation! Please try again later")
 
         return subscription
 

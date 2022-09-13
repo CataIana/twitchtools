@@ -5,4 +5,4 @@ aiofiles
 psutil
 python-dateutil
 munch
-async_timeout
+motor

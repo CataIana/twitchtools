@@ -1,14 +1,17 @@
 from enum import Enum
 
+
 class AlertOrigin(Enum):
     catchup = "catchup"
     callback = "callback"
     unavailable = "unavailable"
 
+
 class BroadcasterType(Enum):
     partner = "partner"
     affiliate = "affiliate"
     none = ''
+
 
 class UserType(Enum):
     staff = "staff"
@@ -16,12 +19,15 @@ class UserType(Enum):
     global_mod = "global_mod"
     none = ""
 
+
 class Live(Enum):
     live = "live"
     none = ""
 
+
 class SubscriptionMethod(Enum):
     webhook = "webhook"
+
 
 class SubscriptionStatus(Enum):
     verification_pending = "webhook_callback_verification_pending"
@@ -30,6 +36,7 @@ class SubscriptionStatus(Enum):
     failures_exceeded = "notification_failures_exceeded"
     authorization_revoked = "authorization_revoked"
     user_removed = "user_removed"
+
 
 class SubscriptionType(Enum):
     # https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types
@@ -71,13 +78,11 @@ class SubscriptionType(Enum):
     USER_AUTHORIZATION_REVOKE = "user.authorization.revoke"
     USER_UPDATE = "user.update"
 
-class AlertFileType(Enum):
-    title = "title_callbacks.json"
-    status = "callbacks.json"
 
 class AlertType(Enum):
     title = "titlecallback"
     status = "callback"
+
 
 class Languages(Enum):
     AA = "Afar"
@@ -265,11 +270,30 @@ class Languages(Enum):
     ZU = "Zulu"
     OTHER = "Other"
 
+
 class VideoType(Enum):
     upload = "upload"
     archive = "archive"
     highlight = "highlight"
 
+
 class VideoPrivacy(Enum):
     public = "public"
     private = "private"
+
+
+class TitleCache(Enum):
+    title: str
+    game: str
+
+
+class ChannelCache(Enum):
+    alert_cooldown: int
+    user_login: str
+    stream_id: int
+    is_live: bool
+    live_channels: list[int]
+    live_alerts: dict[str, int]
+    last_update: int
+    games: dict[str, int]
+    reusable_alerts: list[dict[str, int]]

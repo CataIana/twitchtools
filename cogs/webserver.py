@@ -1,7 +1,6 @@
 from __future__ import annotations
 from aiohttp import web
 from twitchtools.enums import AlertOrigin
-from twitchtools.files import get_notif_cache, write_notif_cache, get_callbacks, get_title_callbacks
 from json.decoder import JSONDecodeError
 import hmac
 import hashlib
@@ -10,14 +9,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
-class RecieverWebServer:
-    def __init__(self, bot):
-        self.bot: TwitchCallBackBot = bot
-        self.port = 18271
-        self.web_server = web.Application()
-        self.web_server.add_routes([web.route('*', '/{callback_type}/{channel}', self._reciever)])
 
-        self.allow_unverified_requests: bool = False # TO BE USED ONLY FOR DEBUGGING PURPOSES
+class RecieverWebServer:
+    def __init__(self, bot, port: int = 18271):
+        self.bot: TwitchCallBackBot = bot
+        self.port = port
+        self.web_server = web.Application()
+        self.web_server.add_routes(
+            [web.route('*', '/{callback_type}/{channel}', self._reciever)])
+
+        # TO BE USED ONLY FOR DEBUGGING PURPOSES
+        self.allow_unverified_requests: bool = False
 
     async def start(self):
         runner = web.AppRunner(self.web_server)
@@ -38,7 +40,9 @@ class RecieverWebServer:
     async def verify_request(self, request: web.Request, secret: str):
         if self.allow_unverified_requests:
             return True
-        notif_cache = await get_notif_cache()
+        # notif_cache = await get_notif_cache()
+        await self.bot.wait_until_db_ready()
+        notif_cache = await self.bot.db.get_notif_cache()
 
         try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
@@ -54,19 +58,20 @@ class RecieverWebServer:
         h = hmac.new(secret.encode("utf-8"), hmac_message, hashlib.sha256)
         expected_signature = f"sha256={h.hexdigest()}"
         self.bot.log.debug(f"Timestamp: {timestamp}")
-        self.bot.log.debug(f"Expected: {expected_signature}. Receieved: {signature}")
+        self.bot.log.debug(
+            f"Expected: {expected_signature}. Receieved: {signature}")
         if signature != expected_signature:
             return False
         notif_cache.append(message_id)
-        await write_notif_cache(notif_cache)
+        # await write_notif_cache(notif_cache)
+        await self.bot.db.write_notif_cache(notif_cache)
         return True
-            
 
     async def post_request(self, request: web.Request, callback_type: str, channel: str):
         if channel == "_callbacktest":
             return web.Response(status=204)
         try:
-            callbacks = await get_callbacks()
+            callbacks = await self.bot.db.get_all_callbacks()
         except FileNotFoundError:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
@@ -74,7 +79,8 @@ class RecieverWebServer:
             self.bot.log.error("Failed to read title callbacks config file!")
             return
         try:
-            channel_id = [id for id, c in callbacks.items() if c["display_name"].lower() == channel][0]
+            channel_id = [id for id, c in callbacks.items(
+            ) if c["display_name"].lower() == channel][0]
         except IndexError:
             self.bot.log.info(f"Request for {channel} not found")
             return web.Response(status=400)
@@ -92,19 +98,23 @@ class RecieverWebServer:
             self.bot.log.info("Missing required parameters")
             return web.Response(status=400)
         data = await request.json()
-        
-        if mode == "webhook_callback_verification": #Initial Verification of Subscription
+
+        if mode == "webhook_callback_verification":  # Initial Verification of Subscription
             if callback_type == "titlecallback":
-                self.bot.dispatch("subscription_confirmation", data["subscription"]["id"])
-                self.bot.log.info(f"Title Change Subscription confirmed for {channel}")
+                self.bot.dispatch("subscription_confirmation",
+                                  data["subscription"]["id"])
+                self.bot.log.info(
+                    f"Title Change Subscription confirmed for {channel}")
             else:
-                self.bot.dispatch("subscription_confirmation", data["subscription"]["id"])
+                self.bot.dispatch("subscription_confirmation",
+                                  data["subscription"]["id"])
                 self.bot.log.info(f"Subscription confirmed for {channel}")
             challenge = data['challenge']
             return web.Response(status=202, text=challenge)
         elif mode == "authorization_revoked":
             if callback_type == "titlecallback":
-                self.bot.log.critical(f"Title Change Authorization Revoked for {channel}!")
+                self.bot.log.critical(
+                    f"Title Change Authorization Revoked for {channel}!")
             else:
                 self.bot.log.critical(f"Authorization Revoked for {channel}!")
             return web.Response(status=202)
@@ -135,7 +145,6 @@ class RecieverWebServer:
         if self.allow_unverified_requests:
             live = True if data["subscription"]["type"] == "stream.online" else False
 
-        
         if live:
             #self.bot.dispatch("streamer_online", stream)
             self.bot.queue.put_nowait(stream)

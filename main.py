@@ -1,29 +1,32 @@
 from __future__ import annotations
 import disnake
 from disnake.ext import commands
-from asyncio import Queue
-from cogs.webserver import RecieverWebServer
-from twitchtools.api import http
+from asyncio import Queue, Event
 from aiohttp import ClientSession
+from twitchtools.api import http
+from twitchtools import CustomConnectionState, PartialUser, AlertOrigin, BadAuthorization
+from cogs.database import DB
+from cogs.webserver import RecieverWebServer
+from twitchtools.files import get_callbacks, get_title_callbacks
 from time import time
 import logging
 import json
 import sys
-from twitchtools import PartialUser, AlertOrigin, get_callbacks, write_callbacks
-from twitchtools.connection_state import CustomConnectionState
 from typing import TypeVar, Type, Any
 from enum import Enum
 
 ACXT = TypeVar("ACXT", bound="disnake.ApplicationCommandInteraction")
 
-class Emotes(Enum):
-    error: str = "<:red_tick:809191812337369118>"
-    success: str = "<:green_tick:809191812434231316>"
 
-    #Override str conversion to return value so we don't have to add .value to every usage
+class Emotes(Enum):
+    error: str = "❌"
+    success: str = "✅"
+
+    # Override str conversion to return value so we don't have to add .value to every usage
     def __str__(self):
-        #return "%s.%s" % (self.__class__.__name__, self._name_)
+        # return "%s.%s" % (self.__class__.__name__, self._name_)
         return self._value_
+
 
 class TwitchCallBackBot(commands.InteractionBot):
     from twitchtools import _sync_application_commands
@@ -31,9 +34,9 @@ class TwitchCallBackBot(commands.InteractionBot):
     def __init__(self):
         intents = disnake.Intents.none()
         intents.guilds = True
-        super().__init__(intents=intents, activity=disnake.Activity(type=disnake.ActivityType.listening, name="stream status"))
+        super().__init__(intents=intents, activity=disnake.Activity(
+            type=disnake.ActivityType.listening, name="stream status"))
         self._sync_commands_debug = True
-
         self.queue = Queue(maxsize=0)
 
         self.log: logging.Logger = logging.getLogger("TwitchTools")
@@ -41,26 +44,46 @@ class TwitchCallBackBot(commands.InteractionBot):
 
         shandler = logging.StreamHandler(sys.stdout)
         shandler.setLevel(self.log.level)
-        shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+        shandler.setFormatter(logging.Formatter(
+            '%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
         self.log.addHandler(shandler)
 
-        self.api: http = http(self, auth_file=f"config/auth.json")
-        self.web_server: RecieverWebServer = RecieverWebServer(self)
+        try:
+            with open("config/auth.json") as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            raise BadAuthorization
+        except json.decoder.JSONDecodeError:
+            raise BadAuthorization
+
+        self.web_server = RecieverWebServer(
+            self, port=config["webserver_port"])
         self.loop.run_until_complete(self.web_server.start())
 
-        self.load_extension(f"cogs.reciever_bot_cogs")
-        self.load_extension(f"cogs.emotes_sync")
-        self.load_extension(f"cogs.error_listener")
-        self.load_extension(f"cogs.streamer_status")
-        self.load_extension(f"cogs.queue_worker")
-        self.load_extension(f"cogs.guild_remove_cleanup")
+        self.db_connect_uri = config["mongodb_uri"]
+        self._db_ready: Event = Event()
+        self.db: DB
+
+        self.load_extension("cogs.database")
+        self.load_extension("cogs.streamer_status")
+        self.load_extension("cogs.queue_handler")
+        self.load_extension("cogs.reciever_bot_cogs")
+        self.load_extension("cogs.error_listener")
+        self.load_extension("cogs.guild_remove_cleanup")
+        self.load_extension("cogs.emotes_sync")
+
+        self.api: http = http(self, **config)
+        self.token = config["bot_token"]
         self.colour = disnake.Colour.from_rgb(128, 0, 128)
         self.emotes = Emotes
-        with open("config/auth.json") as f:
-            self.auth: dict = json.load(f)
-        self.token = self.auth["bot_token"]
         self._uptime = time()
         self.application_invoke = self.process_application_commands
+
+    async def wait_until_db_ready(self):
+        if not self._db_ready.is_set():
+            # Want to avoid waiting where possible
+            self.log.warning("Waiting for DB")
+        await self._db_ready.wait()
 
     async def close(self):
         if not self.aSession.closed:
@@ -70,11 +93,12 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     @commands.Cog.listener()
     async def on_connect(self):
-        self.aSession: ClientSession = ClientSession() #Make the aiohttp session asap
+        self.aSession: ClientSession = ClientSession()  # Make the aiohttp session asap
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
+        self.log.info(
+            f"------ Logged in as {self.user.name} - {self.user.id} ------")
 
     def _get_state(self, **options: Any) -> CustomConnectionState:
         return CustomConnectionState(
@@ -93,23 +117,30 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def catchup_streamers(self):
         await self.wait_until_ready()
-        callbacks = await get_callbacks() #Get callback dict
-        if not callbacks:
+        await self.wait_until_db_ready()
+        callbacks = await self.db.get_all_callbacks()
+        if callbacks == {}:
             return
-        streams = await self.api.get_streams(user_ids=list(callbacks.keys()), origin=AlertOrigin.catchup) #Fetch all streamers, returning the currently live ones
-        online_streams = [str(stream.user.id) for stream in streams] #We only need the ID from them
-        for streamer_id, data in callbacks.items(): #Iterate through all callbacks and update all streamers
-            if streamer_id in online_streams:
-                stream = [s for s in streams if s.user.id == int(streamer_id)][0]
-                if data["display_name"] != stream.user.display_name:
-                    callbacks[streamer_id]["display_name"] = stream.user.display_name
-                    await write_callbacks(callbacks)
+
+        # Fetch all streamers, returning the currently live ones
+        streams = await self.api.get_streams(user_ids=list(callbacks.keys()), origin=AlertOrigin.catchup)
+        # We only need the ID from them
+        online_stream_uids = [str(stream.user.id) for stream in streams]
+
+        # Iterate through all callbacks and update all streamers
+        for streamer_id, callback_info in callbacks.items():
+            if streamer_id in online_stream_uids:
+                stream = [s for s in streams if s.user.id ==
+                          int(streamer_id)][0]
+                # Update display name if needed
+                if callback_info["display_name"] != stream.user.display_name:
+                    callback_info["display_name"] = stream.user.display_name
+                    await self.db.write_callback(stream.user, callback_info)
                 self.queue.put_nowait(stream)
             else:
-                self.queue.put_nowait(PartialUser(user_id=streamer_id, user_login=data["display_name"].lower(), display_name=data["display_name"]))
+                self.queue.put_nowait(PartialUser(
+                    streamer_id, callback_info["display_name"].lower(), callback_info["display_name"]))
 
-                
-    
 
 if __name__ == "__main__":
     bot = TwitchCallBackBot()
