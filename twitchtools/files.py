@@ -1,9 +1,10 @@
-from disnake import Guild, Role
-from typing import Deque, List, Union
-import aiofiles
-import os
 import json
+import os
 from collections import deque
+from typing import Deque, List, Optional, Union
+
+import aiofiles
+from disnake import Guild, Role
 
 # This is a now obsolete file, but it's still here in case
 
@@ -77,9 +78,9 @@ async def get_notif_cache() -> Deque:
         async with aiofiles.open("cache/notifcache.cache") as f:
             return deque(json.loads(await f.read()), maxlen=10)
     except FileNotFoundError:
-        return []
+        return deque([])
     except json.decoder.JSONDecodeError:
-        return []
+        return deque([])
 
 
 async def write_notif_cache(data: Union[Deque, List]) -> None:
@@ -89,7 +90,7 @@ async def write_notif_cache(data: Union[Deque, List]) -> None:
         await f.write(json.dumps(list(data), indent=4))
 
 
-async def get_manager_role(guild: Guild) -> int:
+async def get_manager_role(guild: Guild) -> Optional[int]:
     try:
         async with aiofiles.open("config/manager_roles.json") as f:
             data = json.loads(await f.read())

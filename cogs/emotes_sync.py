@@ -1,11 +1,14 @@
+import json
 from json.decoder import JSONDecodeError
+from typing import TYPE_CHECKING, Union
+
+import aiofiles
 from disnake import Forbidden, HTTPException
 from disnake.emoji import Emoji
 from disnake.ext import commands, tasks
-import json
-import aiofiles
+
 from twitchtools.user import User
-from typing import TYPE_CHECKING, Union
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
@@ -34,7 +37,8 @@ class EmoteSync(commands.Cog):
         self.bot.log.info("Starting emote sync...")
         for guild_id, data in dict(emote_sync).items():
             if data.get("streamer_id", None) is None:
-                user: User = self.bot.api.get_user(user_login=data["streamer"])
+                user: User = self.bot.tapi.get_user(
+                    user_login=data["streamer"])
                 if user is None:
                     self.bot.log.warning(f"Search for streamer {data['streamer']} returned nothing.")
                     continue

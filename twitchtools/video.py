@@ -1,7 +1,24 @@
-from .user import PartialUser
-from .enums import Languages, VideoType, VideoPrivacy
+from typing import Optional, Union
+
 from dateutil import parser
-from typing import Optional
+
+from .enums import AlertOrigin, Languages, VideoPrivacy, VideoType
+from .user import PartialUser, PartialYoutubeUser, YoutubeUser
+
+
+def get_total_seconds(string: str):
+    convs = {"D": 86400, "H": 3600, "M": 60, "S": 1}
+    total = 0
+    capture = ""
+    for i in range(len(string)):
+        # Check if char is an int and capture all until there is a char
+        if string[i].isnumeric():
+            capture += string[i]
+        # Multiply captured numbers depending on suffix
+        elif multiply := convs.get(string[i].upper()):
+            total += int(capture)*multiply
+            capture = ""
+    return total
 
 class Video:
     def __init__(self, id, stream_id, user_id, user_login, user_name, title, description, created_at, published_at, url, thumbnail_url, viewable, view_count, language, type, duration, muted_segments):
@@ -10,11 +27,11 @@ class Video:
         self.stream_id = int(stream_id)
         self.user = PartialUser(user_id, user_login, user_name)
         self.title: str = title
-        self.description: Optional[str] = description if description else None
+        self.description: Optional[str] = description or None
         self.created_at = parser.parse(created_at)
         self.published_at = parser.parse(published_at)
         self.url: str = url
-        self.thumbnail_url: Optional[str] = thumbnail_url if thumbnail_url else None
+        self.thumbnail_url: Optional[str] = thumbnail_url or None
         self.viewable: str = VideoPrivacy(viewable)
         self.view_count: int = int(view_count)
         try:
@@ -22,11 +39,41 @@ class Video:
         except KeyError:
             self.language: Languages = Languages.OTHER
         self.type = VideoType[type]
-        self.duration: str = duration
+        self.duration: int = get_total_seconds(duration)
         self.muted_segments: Optional[list[dict[str]]] = muted_segments
         
     def __repr__(self) -> str:
         return f'<{type(self).__name__} id={self.id} user={self.user.login!r}>'
+
+    def __eq__(self, other):
+        return isinstance(other.__class__, self.__class__) and self.id == other.id
+
+
+class YoutubeVideo:
+    def __init__(self, id: str, snippet: dict, content: dict, stream: dict, alert_origin: AlertOrigin, **kwargs):
+        self.id: str = id
+        self.video_id: str = self.id
+        self.channel = PartialYoutubeUser(
+            snippet["channelId"], snippet["channelTitle"])
+        self.user: Union[PartialYoutubeUser, YoutubeUser] = self.channel
+        self.title: str = snippet["title"]
+        self.description: Optional[str] = snippet["description"] or None
+        self.published_at = parser.parse(snippet["publishedAt"])
+        self.url: str = f"https://youtube.com/watch?v={self.id}"
+        self.thumbnail_url: Optional[str] = snippet["thumbnails"][list(
+            snippet["thumbnails"].keys())[-1]]["url"]
+        self.tags: list[str] = snippet.get("tags", [])
+        self.category_id: int = int(snippet["categoryId"])
+        self.duration: int = get_total_seconds(content["duration"])
+        self.is_live: bool = True if snippet.get(
+            "liveBroadcastContent", None) == "live" else False
+        self.started_at = parser.parse(stream["actualStartTime"])
+        self.created_at = self.started_at
+        self.view_count: Optional[int] = int(stream.get("concurrentViewers", 0)) or None
+        self.origin: AlertOrigin = alert_origin
+
+    def __repr__(self) -> str:
+        return f'<{type(self).__name__} id={self.id} user={self.user.display_name!r}>'
 
     def __eq__(self, other):
         return isinstance(other.__class__, self.__class__) and self.id == other.id

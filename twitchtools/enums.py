@@ -297,3 +297,14 @@ class ChannelCache(Enum):
     last_update: int
     games: dict[str, int]
     reusable_alerts: list[dict[str, int]]
+
+
+class YoutubeChannelCache(Enum):
+    alert_cooldown: int
+    channel_id: str
+    video_id: int
+    is_live: bool
+    live_channels: list[int]
+    live_alerts: dict[str, int]
+    last_update: int
+    reusable_alerts: list[dict[str, int]]

@@ -1,5 +1,8 @@
-from disnake import Interaction, ApplicationCommandInteraction, MessageInteraction, ModalInteraction, ComponentType
+from disnake import ComponentType
+from disnake.interactions import (ApplicationCommandInteraction, Interaction,
+                                  MessageInteraction, ModalInteraction)
 from disnake.state import ConnectionState
+
 #from .custom_context import ApplicationCustomContext
 
 

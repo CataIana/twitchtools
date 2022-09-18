@@ -1,8 +1,12 @@
-from disnake.ui import View, Button
-from disnake import ui, MessageInteraction, ButtonStyle, NotFound, Forbidden, Emoji, PartialEmoji
-from .custom_context import ApplicationCustomContext
 from asyncio import iscoroutinefunction
-from typing import List, Optional, Callable, Union
+from typing import Callable, List, Optional, Union
+
+from disnake import ButtonStyle, Emoji, Forbidden, NotFound, PartialEmoji, ui
+from disnake.interactions import MessageInteraction
+from disnake.ui import Button, View
+
+from .custom_context import ApplicationCustomContext
+
 
 class ButtonCallback(Button):
     def __init__(
@@ -17,7 +21,8 @@ class ButtonCallback(Button):
         emoji: Optional[Union[str, Emoji, PartialEmoji]] = None,
         row: Optional[int] = None,
     ):
-        super().__init__(style=style, label=label, disabled=disabled, custom_id=custom_id, url=url, emoji=emoji, row=row)
+        super().__init__(style=style, label=label, disabled=disabled,
+                         custom_id=custom_id, url=url, emoji=emoji, row=row)
         if not iscoroutinefunction(callback):
             raise TypeError("Callback must be a coroutine!")
         self.callback = callback
@@ -27,8 +32,9 @@ class Confirm(View):
         super().__init__(timeout=180)
         self.ctx = ctx
         self.bot = ctx.bot
-        self.value = None
-        self.interaction: MessageInteraction = None
+        self.value: Optional[bool] = None
+        self.children: list[Button]
+        self.interaction: MessageInteraction
 
     async def interaction_check(self, interaction: MessageInteraction) -> bool:
         if not interaction.author == self.ctx.author:

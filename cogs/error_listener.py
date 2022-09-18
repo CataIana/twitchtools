@@ -1,9 +1,12 @@
+from traceback import format_exc, format_exception
+from typing import TYPE_CHECKING
+
 from disnake.errors import Forbidden
 from disnake.ext import commands
-from traceback import format_exc, format_exception
+
 from twitchtools.custom_context import ApplicationCustomContext
 from twitchtools.exceptions import SubscriptionError
-from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
@@ -14,9 +17,7 @@ class ErrorListener(commands.Cog):
 
     @commands.Cog.listener()
     async def on_error(self, event, *args, **kwargs):
-        channel = self.bot.get_guild(749646865531928628).get_channel(763351494685884446)
         self.bot.log.error(format_exc())
-        await channel.send(f"```python\n{format_exc()[:1982]}\n```")
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception):
@@ -36,7 +37,10 @@ class ErrorListener(commands.Cog):
         error_str = str(exc).replace("\\", "\\\\")[:1900]
         channel = self.bot.get_channel(763351494685884446)
         if channel is not None:
-            await channel.send(f"```python\nException in command {ctx.application_command.name}\n{error_str}\n```")
+            try:
+                await channel.send(f"```python\nException in command {ctx.application_command.name}\n{error_str}\n```")
+            except Forbidden:
+                pass
 
 def setup(bot):
     bot.add_cog(ErrorListener(bot))

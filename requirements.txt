@@ -6,3 +6,4 @@ psutil
 python-dateutil
 munch
 motor
+bs4

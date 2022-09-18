@@ -1,10 +1,13 @@
 from __future__ import annotations
-from aiohttp import web
-from twitchtools.enums import AlertOrigin
-from json.decoder import JSONDecodeError
-import hmac
+
 import hashlib
+import hmac
 from typing import TYPE_CHECKING
+
+from aiohttp import web
+
+from twitchtools import PartialYoutubeUser
+from twitchtools.enums import AlertOrigin
 
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
@@ -35,6 +38,8 @@ class RecieverWebServer:
         self.bot.log.info(f"{request.method} from {channel}")
         if request.method == 'POST':
             return await self.post_request(request, callback_type, channel)
+        elif request.method == "GET":
+            return await self.get_request(request, callback_type, channel)
         return web.Response(status=404)
 
     async def verify_request(self, request: web.Request, secret: str):
@@ -49,7 +54,7 @@ class RecieverWebServer:
             timestamp = request.headers["Twitch-Eventsub-Message-Timestamp"]
             signature = request.headers['Twitch-Eventsub-Message-Signature']
         except KeyError as e:
-            self.bot.log.info(f"Request Denied. Missing Key {e}")
+            self.bot.log.info(f"Twitch request Denied. Missing Key {e}")
             return False
         if message_id in notif_cache:
             return None
@@ -67,89 +72,136 @@ class RecieverWebServer:
         await self.bot.db.write_notif_cache(notif_cache)
         return True
 
+    async def get_request(self, request: web.Request, callback_type: str, channel: str):
+        if callback_type == "youtube":
+            try:
+                mode = request.query['hub.mode']
+                challenge = request.query['hub.challenge']
+            except KeyError:
+                return web.Response(status=404)
+            if mode == "unsubscribe":
+                self.bot.log.info(
+                    f"Youtube subscription removal confirmed for {channel}")
+                return web.Response(text=challenge)
+            user = PartialYoutubeUser(channel, "")
+            callback = await self.bot.db.get_yt_callback(user)
+            if callback is None:
+                self.bot.log.info(f"Youtube request for {channel} not found")
+                return web.Response(status=404)
+
+            try:
+                #mode = request.query['hub.mode']
+                #challenge = request.query['hub.challenge']
+                verification = request.query['hub.verify_token']
+                secret = verification.split(":")[0]
+                verify_token = verification.split(":")[-1]
+            except KeyError as e:
+                self.bot.log.warning(
+                    f"Youtube subscription failed: Not all arguments provided {e}")
+                return web.Response(status=404)
+
+            if mode == "subscribe" and secret == callback["secret"]:
+                self.bot.dispatch(
+                    "youtube_subscription_confirmation", verify_token)
+                self.bot.log.info(
+                    f"Youtube subscription confirmed for {callback['display_name']}")
+                return web.Response(text=challenge)
+        return web.Response(status=404)
+
     async def post_request(self, request: web.Request, callback_type: str, channel: str):
         if channel == "_callbacktest":
             return web.Response(status=204)
-        try:
-            callbacks = await self.bot.db.get_all_callbacks()
-        except FileNotFoundError:
-            self.bot.log.error("Failed to read title callbacks config file!")
-            return
-        except JSONDecodeError:
-            self.bot.log.error("Failed to read title callbacks config file!")
-            return
-        try:
-            channel_id = [id for id, c in callbacks.items(
-            ) if c["display_name"].lower() == channel][0]
-        except IndexError:
-            self.bot.log.info(f"Request for {channel} not found")
-            return web.Response(status=400)
-
-        verified = await self.verify_request(request, callbacks[channel_id]["secret"])
-        if verified == False:
-            self.bot.log.info("Unverified request, aborting")
-            return web.Response(status=400)
-        elif verified == None:
-            self.bot.log.info("Already sent code, ignoring")
-            return web.Response(status=202)
-        try:
-            mode = request.headers["Twitch-Eventsub-Message-Type"]
-        except KeyError:
-            self.bot.log.info("Missing required parameters")
-            return web.Response(status=400)
-        data = await request.json()
-
-        if mode == "webhook_callback_verification":  # Initial Verification of Subscription
-            if callback_type == "titlecallback":
-                self.bot.dispatch("subscription_confirmation",
-                                  data["subscription"]["id"])
-                self.bot.log.info(
-                    f"Title Change Subscription confirmed for {channel}")
-            else:
-                self.bot.dispatch("subscription_confirmation",
-                                  data["subscription"]["id"])
-                self.bot.log.info(f"Subscription confirmed for {channel}")
-            challenge = data['challenge']
-            return web.Response(status=202, text=challenge)
-        elif mode == "authorization_revoked":
-            if callback_type == "titlecallback":
-                self.bot.log.critical(
-                    f"Title Change Authorization Revoked for {channel}!")
-            else:
-                self.bot.log.critical(f"Authorization Revoked for {channel}!")
-            return web.Response(status=202)
-        elif mode == "notification":
-            if callback_type == "titlecallback":
-                self.bot.log.info(f"Title Change Notification for {channel}")
-                return await self.title_notification(channel, data)
-            else:
-                self.bot.log.info(f"Notification for {channel}")
-                return await self.notification(channel, data)
+        if callback_type == "youtube":
+            user = PartialYoutubeUser(channel, "")
+            callback = await self.bot.db.get_yt_callback(user)
+            if callback is None:
+                self.bot.log.info(f"Youtube request for {channel} not found")
+                return web.Response(status=404)
+            data = (await request.read()).decode('utf-8')
+            return await self.youtube_notification(PartialYoutubeUser(channel, callback["display_name"]), data)
         else:
-            self.bot.log.info("Unknown mode")
+            callbacks = await self.bot.db.get_all_callbacks()
+            try:
+                channel_id = [id for id, c in callbacks.items(
+                ) if c["display_name"].lower() == channel][0]
+            except IndexError:
+                self.bot.log.info(f"Request for {channel} not found")
+                return web.Response(status=400)
+
+            verified = await self.verify_request(request, callbacks[channel_id]["secret"])
+            if verified == False:
+                self.bot.log.info("Unverified request, aborting")
+                return web.Response(status=400)
+            elif verified == None:
+                self.bot.log.info("Request duplicate, ignoring")
+                return web.Response(status=202)
+            try:
+                mode = request.headers["Twitch-Eventsub-Message-Type"]
+            except KeyError:
+                self.bot.log.info("Missing required parameters")
+                return web.Response(status=400)
+            data = await request.json()
+
+            if mode == "webhook_callback_verification":  # Initial Verification of Subscription
+                if callback_type == "titlecallback":
+                    self.bot.dispatch("subscription_confirmation",
+                                      data["subscription"]["id"])
+                    self.bot.log.info(
+                        f"Title Change Subscription confirmed for {channel}")
+                else:
+                    self.bot.dispatch("subscription_confirmation",
+                                      data["subscription"]["id"])
+                    self.bot.log.info(f"Subscription confirmed for {channel}")
+                challenge = data['challenge']
+                return web.Response(status=202, text=challenge)
+            elif mode == "authorization_revoked":
+                if callback_type == "titlecallback":
+                    self.bot.log.critical(
+                        f"Title Change Authorization Revoked for {channel}!")
+                else:
+                    self.bot.log.critical(
+                        f"Authorization Revoked for {channel}!")
+                return web.Response(status=202)
+            elif mode == "notification":
+                if callback_type == "titlecallback":
+                    # self.bot.log.info(
+                    #     f"Title Change Notification for {channel}")
+                    return await self.title_notification(channel, data)
+                else:
+                    # self.bot.log.info(f"Notification for {channel}")
+                    return await self.notification(channel, data)
+            else:
+                self.bot.log.info("Unknown mode")
         return web.Response(status=404)
 
-    async def title_notification(self, channel, data):
-        event = self.bot.api.get_event(data)
+    async def title_notification(self, channel: str, data: dict):
+        event = self.bot.tapi.get_event(data)
         self.bot.queue.put_nowait(event)
-        #self.bot.dispatch("title_change", event)
 
         return web.Response(status=202)
 
-    async def notification(self, channel, data):
+    async def notification(self, channel: str, data: dict):
         channel = data["event"].get("broadcaster_user_login", channel)
-        streamer = await self.bot.api.get_user(user_login=channel)
-        stream = await self.bot.api.get_stream(streamer, origin=AlertOrigin.callback)
+        streamer = await self.bot.tapi.get_user(user_login=channel)
+        stream = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.callback)
 
         live = stream is not None
         if self.allow_unverified_requests:
             live = True if data["subscription"]["type"] == "stream.online" else False
 
         if live:
-            #self.bot.dispatch("streamer_online", stream)
             self.bot.queue.put_nowait(stream)
         else:
-            #self.bot.dispatch("streamer_offline", streamer)
             self.bot.queue.put_nowait(streamer)
+
+        return web.Response(status=202)
+
+    async def youtube_notification(self, channel: PartialYoutubeUser, data: str):
+        video = await self.bot.yapi.parse_video_xml(channel, data)
+
+        if video:
+            self.bot.queue.put_nowait(video)
+        else:
+            self.bot.queue.put_nowait(channel)
 
         return web.Response(status=202)

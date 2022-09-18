@@ -1,6 +1,10 @@
-from disnake.ext import commands
-from twitchtools import TitleEvent, Stream, User, PartialUser
 from typing import TYPE_CHECKING, Union
+
+from disnake.ext import commands
+
+from twitchtools import (PartialUser, PartialYoutubeUser, Stream, TitleEvent,
+                         User, YoutubeUser, YoutubeVideo)
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
@@ -12,13 +16,13 @@ class QueueHandler(commands.Cog):
         # NEVER ASSIGN A TASK TO A VARIABLE AGAIN MYAAA.
         # Caused a bug that would cause this worker to get stuck with no errors
         self.bot.loop.create_task(self.queue_handler())
-        self.status_cog = self.bot.get_cog("StreamStatus")
+        self.status_cog = self.bot.get_cog("StreamStateManager")
 
     async def queue_handler(self):
         self.bot.log.debug("Queue Worker Started")
         while not self.bot.is_closed():
             item: Union[Stream, User, TitleEvent] = await self.bot.queue.get()
-            self.bot.log.debug(f"Recieved event! {type(item).__name__}")
+            self.bot.log.debug(f"Recieved task of type {type(item).__name__}")
             if self.status_cog is None:
                 self.status_cog = self.bot.get_cog("StreamStatus")
                 if self.status_cog is None:
@@ -39,12 +43,22 @@ class QueueHandler(commands.Cog):
                 if self.status_cog:
                     await self.status_cog.on_title_change(item)
                 self.bot.dispatch("title_change", item)
+            
+            elif isinstance(item, YoutubeVideo):
+                if self.status_cog:
+                    await self.status_cog.on_youtube_streamer_online(item)
+                self.bot.dispatch("title_change", item)
+
+            elif isinstance(item, (YoutubeUser, PartialYoutubeUser)):
+                if self.status_cog:
+                    await self.status_cog.on_youtube_streamer_offline(item)
+                self.bot.dispatch("title_change", item)
 
             else:
                 self.bot.log.warn(
                     f"Recieved bad queue object with type \"{type(item).__name__}\"!")
 
-            self.bot.log.debug(f"Finished task {type(item).__name__}")
+            self.bot.log.debug(f"Finished task with type {type(item).__name__}")
             self.bot.queue.task_done()
 
 

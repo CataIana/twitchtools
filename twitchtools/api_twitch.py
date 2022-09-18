@@ -1,20 +1,24 @@
 from __future__ import annotations
+
 import asyncio
-from disnake import HTTPException
+from typing import TYPE_CHECKING, List, Optional, Union
+
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
+from disnake import HTTPException
+
+from .enums import AlertOrigin, AlertType, SubscriptionType
 from .exceptions import *
-from .subscription import Subscription, SubscriptionEvent, TitleEvent
-from .enums import AlertOrigin, SubscriptionType, AlertType
-from .user import PartialUser, User
 from .stream import Stream
+from .subscription import Subscription, SubscriptionEvent, TitleEvent
+from .user import PartialUser, User
 from .video import Video
-from typing import TYPE_CHECKING, Union, List, Optional
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
 
-class http:
+class http_twitch:
     def __init__(self, bot, client_id, client_secret, callback_url, **kwargs):
         self.bot: TwitchCallBackBot = bot
         self.base = "https://api.twitch.tv/helix"
@@ -29,7 +33,7 @@ class http:
         self.bot.add_listener(self._make_session, 'on_connect')
         self.bot.add_listener(self._fetch_access_token, 'on_connect')
 
-    async def _fetch_access_token(self) -> str:
+    async def _fetch_access_token(self):
         self.access_token = await self.bot.db.get_access_token()
 
     @property
@@ -38,6 +42,10 @@ class http:
 
     async def _make_session(self):
         self.session: ClientSession = ClientSession()
+
+    async def close_session(self):
+        if not self.session.closed:
+            await self.session.close()
 
     async def _request(self, url, method="get", **kwargs):
         response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
@@ -70,8 +78,6 @@ class http:
         for chunk in self.chunks(queries, 100):
             join = '&'.join(chunk)
             r = await self._request(f"{self.base}/users?{join}")
-            if r.status != 200:
-                raise HTTPException
             json_data = (await r.json())["data"]
             for user_json in json_data:
                 users += User(**user_json)
@@ -87,8 +93,6 @@ class http:
             r = await self._request(f"{self.base}/users?login={user_login}")
         else:
             raise BadRequest
-        if r.status != 200:
-            raise HTTPException
         j = await r.json()
         if j["data"] == []:
             return None
@@ -106,8 +110,6 @@ class http:
         for chunk in self.chunks(queries, 20):
             join = '&'.join(chunk)
             r = await self._request(f"{self.base}/streams?{join}")
-            if r.status != 200:
-                raise HTTPException
             j = await r.json()
             for stream in j["data"]:
                 s = Stream(**stream)
@@ -115,14 +117,8 @@ class http:
                 streams.append(s)
         return streams
 
-    async def get_stream(self, user: Union[PartialUser, User, str], origin: AlertOrigin = AlertOrigin.unavailable) -> Union[Stream, None]:
-        if type(user) in [PartialUser, User]:
-            user_login = user.username
-        else:
-            user_login = user
-        r = await self._request(f"{self.base}/streams?user_login={user_login}")
-        if r.status != 200:
-            raise HTTPException
+    async def get_stream(self, user: Union[PartialUser, User], origin: AlertOrigin = AlertOrigin.unavailable) -> Union[Stream, None]:
+        r = await self._request(f"{self.base}/streams?user_login={user}")
         j = await r.json()
         if j["data"] == []:
             return None
@@ -147,10 +143,11 @@ class http:
             subs.append(Subscription(**sub))
         return subs
 
-    def get_event(self, data) -> SubscriptionEvent:
+    def get_event(self, data) -> Optional[SubscriptionEvent]:
         event_type = SubscriptionType(data["subscription"]["type"])
         if event_type == SubscriptionType.CHANNEL_UPDATE:
             return TitleEvent(**data)
+        return None
 
     async def create_subscription(self, subscription_type: SubscriptionType, streamer: Union[User, PartialUser], secret: str, alert_type: AlertType = AlertType.status) -> Subscription:
         response = await self._request(f"{self.base}/eventsub/subscriptions",
@@ -196,7 +193,7 @@ class http:
             subscription = subscription.id
         return await self._request(f"{self.base}/eventsub/subscriptions?id={subscription}", method="delete")
 
-    async def get_videos(self, user: Union[User, PartialUser]) -> Video:
+    async def get_videos(self, user: Union[User, PartialUser]) -> list[Video]:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
         vids = []
@@ -204,14 +201,14 @@ class http:
             vids.append(Video(**vid))
         return vids
 
-    async def get_video(self, video_id: int) -> Video:
+    async def get_video(self, video_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?id={video_id}")
         rj = await r.json()
         for vid in rj["data"]:
             return Video(**vid)
         return None
 
-    async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Video:
+    async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
         for vid in rj["data"]:

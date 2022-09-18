@@ -1,6 +1,8 @@
-from disnake import ApplicationCommandInteraction
-from disnake.utils import snowflake_time
 from typing import TYPE_CHECKING
+
+from disnake.interactions import ApplicationCommandInteraction
+from disnake.utils import snowflake_time
+
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 

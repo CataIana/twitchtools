@@ -1,19 +1,21 @@
 from datetime import datetime
+from typing import Optional, Union
+
 from dateutil import parser
-from .enums import Live, Languages, AlertOrigin
-from datetime import datetime
-from .user import PartialUser
+
 from .asset import Thumbnail
-from typing import Optional
+from .enums import AlertOrigin, Languages, Live
+from .user import PartialUser, User
 
 
 class Stream:
     def __init__(self, id: int, user_id: int, user_login: str, user_name: str, game_id: int,
-                 game_name: str, type: Live, title: str, viewer_count: int, started_at: datetime,
-                 language: Languages, thumbnail_url: str, tag_ids: list, is_mature: bool, origin: AlertOrigin = AlertOrigin.unavailable):
+                 game_name: str, type: Live, title: str, viewer_count: int, started_at: str,
+                 language: str, thumbnail_url: str, tag_ids: list, is_mature: bool, origin: AlertOrigin = AlertOrigin.unavailable):
         self.stream_id: int = int(id)
         self.id: int = id
-        self.user: PartialUser = PartialUser(user_id, user_login, user_name)
+        self.user: Union[PartialUser, User] = PartialUser(
+            user_id, user_login, user_name)
         self.game_id: Optional[int] = int(game_id) if game_id != '' else None
         self.game: str = "<no game>" if game_name == "" else game_name
         self.game_name: str = self.game

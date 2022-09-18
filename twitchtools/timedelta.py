@@ -1,5 +1,7 @@
 import datetime
+
 from dateutil.relativedelta import relativedelta
+
 
 class plural:
     def __init__(self, value):

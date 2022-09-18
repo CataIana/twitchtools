@@ -1,15 +1,18 @@
-from time import time
 from asyncio import iscoroutinefunction
 from functools import wraps
+from time import time
+
 from twitchtools.exceptions import RateLimitExceeded
 
+
 class Ratelimit:
-    def __init__(self, calls: int, period: int):
+    def __init__(self, calls: int, period: int, display_name: str):
         self.calls = calls # How many calls per period
         self.period = period # How many seconds before reset
 
         self._requests_in_period = 0
         self._reset_time = 0
+        self.display_name = display_name
 
     def __call__(self, func):
         if iscoroutinefunction(func):
@@ -34,5 +37,5 @@ class Ratelimit:
             self._requests_in_period = 0 # Reset requests period
 
         if self._requests_in_period >= self.calls: # If requests are above what they should be
-            raise RateLimitExceeded(self.reset_time)
+            raise RateLimitExceeded(self.display_name, self.reset_time)
         self._requests_in_period += 1 # Otherwise just iterate requests

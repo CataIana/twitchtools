@@ -1,7 +1,10 @@
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, List
+
+from disnake import ApplicationCommand, Client, SyncWarning
 from disnake.ext.commands.interaction_bot_base import _app_commands_diff
-from disnake import Client, ApplicationCommand, SyncWarning
-from typing import Dict, List, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from twitchtools import TwitchCallBackBot
 

@@ -1,10 +1,20 @@
 from datetime import datetime
+
 from dateutil import parser
-from .enums import SubscriptionStatus, SubscriptionType, Languages, SubscriptionMethod
-from .user import PartialUser
+
+from .enums import (Languages, SubscriptionMethod, SubscriptionStatus,
+                    SubscriptionType)
+from .user import PartialUser, PartialYoutubeUser
+
+
+class YoutubeSubscription:
+    def __init__(self, id: str, channel: PartialYoutubeUser, secret: str):
+        self.id: str = id
+        self.channel: PartialYoutubeUser = channel
+        self.secret: str = secret
 
 class Subscription:
-    def __init__(self, id: str, status: str, type: str, version: int, condition: dict, created_at: datetime, transport: dict, cost: int):
+    def __init__(self, id: str, status: str, type: str, version: int, condition: dict, created_at: str, transport: dict, cost: int):
         self.id: str = id
         self.status: SubscriptionStatus = SubscriptionStatus(status)
         self.type: SubscriptionType = SubscriptionType(type)

@@ -21,9 +21,9 @@ class SubscriptionError(TwitchToolsException):
 
 
 class RateLimitExceeded(TwitchToolsException):
-    def __init__(self, when):
+    def __init__(self, display_name, when):
         super().__init__(
-            f"Ratelimit Exceeded! Try again in {when} second{'s' if when != 1 else ''}")
+            f"Ratelimit exceeded for {display_name}! Wait {when} second{'s' if when != 1 else ''}")
 
 
 class DBConnectionError(TwitchToolsException):
