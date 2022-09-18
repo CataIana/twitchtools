@@ -91,7 +91,7 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def ratelimit_request(self, streamer: Union[PartialYoutubeUser, PartialUser]):
         if self.ratelimits.get(streamer.id, None) is None:
-            self.ratelimits[streamer.id] = Ratelimit(calls=10, period=600)
+            self.ratelimits[streamer.id] = Ratelimit(calls=10, period=600, display_name=streamer.display_name)
         self.ratelimits[streamer.id].request()
 
     async def wait_until_db_ready(self):

@@ -49,7 +49,7 @@ class StreamStateManager(commands.Cog):
 
         stream = await self.bot.tapi.get_stream(event.broadcaster.username, origin=AlertOrigin.callback)
         if stream:
-            self.bot.ratelimit_request(event.broadcaster)
+            await self.bot.ratelimit_request(event.broadcaster)
             # channel_cache = await get_channel_cache()
             channel_cache = await self.bot.db.get_channel_cache(stream.user)
             stream.user = await self.bot.tapi.get_user(user=stream.user)
@@ -488,7 +488,7 @@ class StreamStateManager(commands.Cog):
                 if title_cache.title != video.title:
                     title_cache.title = video.title
                     await self.bot.db.write_yt_title_cache(video.channel, title_cache)
-                self.bot.ratelimit_request(video.user)
+                await self.bot.ratelimit_request(video.user)
                 video.user = await self.bot.yapi.get_user(video.user)
                 embed = disnake.Embed(
                     title=video.title, url=f"https://youtube.com/watch?v={video.id}",
