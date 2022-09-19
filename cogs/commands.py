@@ -131,15 +131,6 @@ class CommandsCog(commands.Cog):
             self.bot.reload_extension(ext_name)
         await ctx.send(f"{self.bot.emotes.success} Succesfully reloaded! Reloaded {cog_count} cogs!", ephemeral=True)
 
-    @commands.slash_command(description="Owner Only: Run streamer catchup manually")
-    @commands.is_owner()
-    async def catchup(self, ctx: ApplicationCustomContext):
-        await ctx.response.defer()
-        await self.bot.twitch_catchup()
-        await self.bot.youtube_catchup()
-        self.bot.log.info("Finished manual catchup")
-        await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
-
     @commands.slash_command(description="Get various bot information such as memory usage and version")
     @has_manage_permissions()
     async def botstatus(self, ctx: ApplicationCustomContext):

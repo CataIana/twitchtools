@@ -1,10 +1,10 @@
 import asyncio
 from datetime import datetime
-from typing import Callable, TypeVar, Union
+from typing import Callable, TypeVar
 
 import disnake
 from disnake import Embed, Role, TextChannel
-from disnake.ext import commands, tasks
+from disnake.ext import commands
 
 from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
@@ -75,15 +75,6 @@ class TwitchCommandsCog(commands.Cog, name="Twitch Commands Cog"):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
-        self.twitch_backup_checks.start()
-
-    def cog_unload(self):
-        self.twitch_backup_checks.cancel()
-
-    @tasks.loop(seconds=1800)
-    async def twitch_backup_checks(self):
-        await self.bot.twitch_catchup()
-        self.bot.log.info("Ran twitch catchup")
 
     async def check_channel_permissions(self, ctx: ApplicationCustomContext, channel: TextChannel):
         perms = {"view_channel": True,

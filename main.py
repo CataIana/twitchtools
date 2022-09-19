@@ -70,14 +70,25 @@ class TwitchCallBackBot(commands.InteractionBot):
         self._db_ready: Event = Event()
         self.db: DB
 
+        # Mongo DB
         self.load_extension("cogs.database")
+        # Functions for events
         self.load_extension("cogs.state_manager")
+        # Receives and propogates events
         self.load_extension("cogs.queue_handler")
+        # General commands cog
         self.load_extension("cogs.commands")
+        # Twitch related commands cog
         self.load_extension("cogs.twitch_commands")
+        # Youtube related commands cog
         self.load_extension("cogs.youtube_commands")
+        # Catches and handles exceptions
         self.load_extension("cogs.error_listener")
+        # Cleans up database on being removed from servers
         self.load_extension("cogs.guild_remove_cleanup")
+        # Handles catching up state when events may not occur or are missed
+        self.load_extension("cogs.catchup")
+        # Just garbage, maybe I will fix this one day
         self.load_extension("cogs.emotes_sync")
 
         self.tapi = http_twitch(self, **config)
@@ -91,7 +102,8 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def ratelimit_request(self, streamer: Union[PartialYoutubeUser, PartialUser]):
         if self.ratelimits.get(streamer.id, None) is None:
-            self.ratelimits[streamer.id] = Ratelimit(calls=10, period=600, display_name=streamer.display_name)
+            self.ratelimits[streamer.id] = Ratelimit(
+                calls=10, period=600, display_name=streamer.display_name)
         self.ratelimits[streamer.id].request()
 
     async def wait_until_db_ready(self):
@@ -131,80 +143,6 @@ class TwitchCallBackBot(commands.InteractionBot):
 
     async def get_slash_context(self, interaction: disnake.interactions.Interaction, *, cls: Type[ACXT] = disnake.interactions.ApplicationCommandInteraction):
         return cls(data=interaction, state=self._connection)
-
-    async def twitch_catchup(self):
-        await self.wait_until_ready()
-        await self.wait_until_db_ready()
-        callbacks = await self.db.get_all_callbacks()
-        if callbacks == {}:
-            return
-
-        # Fetch all streamers, returning the currently live ones
-        streams = await self.tapi.get_streams(user_ids=list(callbacks.keys()), origin=AlertOrigin.catchup)
-        # We only need the ID from them
-        online_stream_uids = [str(stream.user.id) for stream in streams]
-
-        # Iterate through all callbacks and update all streamers
-        for streamer_id, callback_info in callbacks.items():
-            if streamer_id in online_stream_uids:
-                stream = [s for s in streams if s.user.id ==
-                          int(streamer_id)][0]
-                # Update display name if needed
-                if callback_info["display_name"] != stream.user.display_name:
-                    callback_info["display_name"] = stream.user.display_name
-                    await self.db.write_callback(stream.user, callback_info)
-                self.queue.put_nowait(stream)
-            else:
-                self.queue.put_nowait(PartialUser(
-                    streamer_id, callback_info["display_name"].lower(), callback_info["display_name"]))
-
-    async def youtube_catchup(self):
-        await self.wait_until_ready()
-        await self.wait_until_db_ready()
-        callbacks = await self.db.get_all_yt_callbacks()
-        if callbacks == {}:
-            return
-
-        # Get all caches, saves multiple DB calls for same data
-        caches = {c: await self.db.get_yt_channel_cache(c) for c in callbacks.keys()}
-
-        # Offline -> online handling
-
-        # Filter live channels out
-        non_live_channels = [c for c in callbacks.keys(
-        ) if not caches[c].get("is_live", False)]
-        # Fetch recent video IDs from each channel. No API cost. Only check non live channels. Returns dict[channel, list[video_id]]
-        recent_vids = await self.yapi.get_recent_video_ids(non_live_channels)
-        # Returns dict containing each channel as key and video id as value. Return empty dict if none
-        new_live_channels = await self.yapi.are_videos_live(recent_vids)
-
-        # Online -> offline handling
-
-        # Fetch all channels that are live. Returns list of video_ids that have ended
-        live_videos_cached = [
-            caches[c].video_id for c in callbacks.keys() if caches[c].get("is_live", False)]
-        ended_videos = await self.yapi.have_videos_ended(live_videos_cached)
-
-        # Iterate through all callbacks and update all streamers
-        for channel, callback_info in callbacks.items():
-            # If channel is live, check cached video to see if finished
-            if channel not in non_live_channels:
-                if caches[channel].video_id in ended_videos:
-                    self.queue.put_nowait(channel)
-                else:
-                    video = await self.yapi.get_stream(caches[channel].video_id, alert_origin=AlertOrigin.catchup)
-                    self.queue.put_nowait(video)
-            else:
-                # Otherwise, check if channel is live, and fetch video that is live
-                if video_id := new_live_channels.get(channel, None):
-                    video = await self.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
-                    # Update display name if needed
-                    if callback_info["display_name"] != video.user.display_name:
-                        callback_info["display_name"] = video.user.display_name
-                        await self.db.write_yt_callback(video.user, callback_info)
-                    self.queue.put_nowait(video)
-                else:
-                    self.queue.put_nowait(channel)
 
     def random_string_generator(self, str_size):
         return "".join(choice(ascii_letters) for _ in range(str_size))

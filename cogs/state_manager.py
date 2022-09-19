@@ -233,7 +233,7 @@ class StreamStateManager(commands.Cog):
     async def on_youtube_streamer_offline(self, channel: Union[YoutubeUser, PartialYoutubeUser]):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
-        # This will never be called by an event and only catchup will call this due to lack of event
+        # Due to lack of an event, only catchup will trigger this
 
         channel_cache = await self.bot.db.get_yt_channel_cache(channel)
         callback = await self.bot.db.get_yt_callback(channel)
