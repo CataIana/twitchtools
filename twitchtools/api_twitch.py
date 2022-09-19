@@ -34,6 +34,7 @@ class http_twitch:
         self.bot.add_listener(self._fetch_access_token, 'on_connect')
 
     async def _fetch_access_token(self):
+        await self.bot.wait_until_db_ready()
         self.access_token = await self.bot.db.get_access_token()
 
     @property
