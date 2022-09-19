@@ -21,7 +21,7 @@ This setup requires you have some experience with the command line, as well as c
 The below invite url will grant them, along with the required permissions. Make sure to replace <client_id> with your client id!
 `https://discord.com/oauth2/authorize?client_id=<client_id>&permissions=224272&scope=applications.commands%20bot`
 
-If you wish to enable the "Add to Server" button, make sure the permissions integer you use is `224272`
+If you wish to enable the "Add to Server" button, make sure you select these permissions: Manage Channels, Read Messages/View Channels, Send Messages, Embed Links and Mention Everyone
 
 Emote sync doesn't have an interface yet since it hasn't been fully finished. If you want to try run it, create `emote_sync.json` in the config folder. The layout per guild looks like ` { "<guild_id>": { "streamer": "<streamer_login>" } }`
 
