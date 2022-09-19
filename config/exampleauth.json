@@ -1,6 +1,7 @@
 {
   "client_id": "Twitch client ID",
   "client_secret": "Twitch client secret",
+  "yt_api_key": "Youtube API Key. Must have access to Youtube Data API",
   "bot_token": "Discord bot token",
   "callback_url": "Your callback url. Example: https://example.com",
   "mongodb_uri": "mongodb://localhost",
