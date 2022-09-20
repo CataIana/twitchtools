@@ -1016,15 +1016,18 @@ class CommandsCog(commands.Cog):
                 f"Twitch streamer {streamer.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
             await self.bot.wait_until_db_ready()
             if alert_type == AlertType.status:
-                await self.bot.tapi.delete_subscription(callback["offline_id"])
-                await self.bot.tapi.delete_subscription(callback["online_id"])
-                # Hand off subscription to title callback if it is defined for the streamer
-                if title_callback := await self.bot.db.get_title_callback(streamer):
-                    title_callback["subscription_id"] = callback["title_id"]
-                    title_callback["secret"] = callback["secret"]
-                    await self.bot.db.write_title_callback(streamer, title_callback)
-                else:
-                    await self.bot.tapi.delete_subscription(callback["title_id"])
+                try:
+                    await self.bot.tapi.delete_subscription(callback["offline_id"])
+                    await self.bot.tapi.delete_subscription(callback["online_id"])
+                    # Hand off subscription to title callback if it is defined for the streamer
+                    if title_callback := await self.bot.db.get_title_callback(streamer):
+                        title_callback["subscription_id"] = callback["title_id"]
+                        title_callback["secret"] = callback["secret"]
+                        await self.bot.db.write_title_callback(streamer, title_callback)
+                    else:
+                        await self.bot.tapi.delete_subscription(callback["title_id"])
+                except KeyError:
+                    pass
                 await self.bot.db.delete_channel_cache(streamer)
             else:
                 if callback.get("subscription_id", None):

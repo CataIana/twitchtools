@@ -35,7 +35,7 @@ class RecieverWebServer:
         await self.bot.wait_until_ready()
         channel = request.match_info["channel"]
         callback_type = request.match_info["callback_type"]
-        self.bot.log.info(f"{request.method} from {channel}")
+        self.bot.log.info(f"{request.method} to {callback_type} for {channel}")
         if request.method == 'POST':
             return await self.post_request(request, callback_type, channel)
         elif request.method == "GET":
@@ -120,16 +120,18 @@ class RecieverWebServer:
             data = (await request.read()).decode('utf-8')
             return await self.youtube_notification(PartialYoutubeUser(channel, callback["display_name"]), data)
         else:
-            if callback_type == "titlecallback":
-                callbacks = await self.bot.db.get_all_title_callbacks()
-            else:
-                callbacks = await self.bot.db.get_all_callbacks()
+            callbacks = await self.bot.db.get_all_callbacks()
             try:
                 channel_id = [id for id, c in callbacks.items(
                 ) if c["display_name"].lower() == channel][0]
             except IndexError:
-                self.bot.log.info(f"Request for {channel} not found")
-                return web.Response(status=400)
+                callbacks = await self.bot.db.get_all_title_callbacks()
+                try:
+                    channel_id = [id for id, c in callbacks.items(
+                    ) if c["display_name"].lower() == channel][0]
+                except IndexError:
+                    self.bot.log.info(f"Request for {channel} not found")
+                    return web.Response(status=400)
 
             verified = await self.verify_request(request, callbacks[channel_id]["secret"])
             if verified == False:
