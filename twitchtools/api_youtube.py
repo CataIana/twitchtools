@@ -105,7 +105,7 @@ class http_youtube:
         def check(verify_token):
             if verify_token == subscription.id:
                 return True
-            self.bot.log.debug("Bad verify token received!")
+            self.bot.log.warning(f"Bad verify token received for {channel.display_name}")
             return False
         try:
             await self.bot.wait_for("youtube_subscription_confirmation", check=check, timeout=8)

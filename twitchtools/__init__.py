@@ -12,4 +12,4 @@ from .stream import *
 from .subscription import *
 from .timedelta import human_timedelta
 from .user import *
-from .views import Confirm, TextPaginator
+from .views import Confirm, TextPaginator, SortableTextPaginator

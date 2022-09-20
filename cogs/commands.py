@@ -19,9 +19,10 @@ from munch import munchify
 
 from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
-                         Confirm, PartialUser, SubscriptionError,
-                         SubscriptionType, TextPaginator, User,
-                         YoutubeSubscription, YoutubeUser, human_timedelta)
+                         Confirm, PartialUser, SortableTextPaginator,
+                         SubscriptionError, SubscriptionType, TextPaginator,
+                         User, YoutubeSubscription, YoutubeUser,
+                         human_timedelta)
 
 LEASE_SECONDS = 828000
 
@@ -695,121 +696,148 @@ class CommandsCog(commands.Cog):
 
     @streamers_list.sub_command(name="twitch", description="List all the active streamer alerts setup in this server")
     async def streamers_list_twitch(self, ctx: ApplicationCustomContext):
+        await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_callbacks()
 
         if len(callbacks) == 0:
             return await ctx.send(f"{self.bot.emotes.error} No streamers configured for this server!")
+        for streamer_id, alert_info in dict(callbacks).items():
+            cache = await self.bot.db.get_channel_cache(PartialUser(streamer_id, alert_info["display_name"].lower(), alert_info["display_name"]))
+            callbacks[streamer_id]["last_live"] = cache.get(
+                "alert_cooldown", 0)
 
-        await self.bot.wait_until_db_ready()
+        def page_generator(data: dict, sort_by: str, reverse: bool) -> list[str]:
+            pages: list[str] = []
+            page = [
+                f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
+            # The lambda pases the 2 items as a tuple, read the alert_info and return display name
 
-        pages: list[str] = []
-        page = [
-            f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
-        # The lambda pases the 2 items as a tuple, read the alert_info and return display name
-        for streamer_id, alert_info in dict(sorted(callbacks.items(), key=lambda packed_items: packed_items[1]['display_name'].lower())).items():
-            if str(ctx.guild.id) in alert_info["alert_roles"].keys():
-                info = alert_info["alert_roles"][str(ctx.guild.id)]
-                alert_role_id = info.get("role_id", None)
-                if alert_role_id is None:
-                    alert_role = "<No Alert Role>"
-                elif alert_role_id == "everyone":
-                    alert_role == "@everyone"
-                else:
-                    if alert_role := ctx.guild.get_role(int(alert_role_id)):
-                        alert_role = alert_role.name
+            def sorter(items):
+                if type(items[1][sort_by]) == str:
+                    return items[1][sort_by].lower()
+                return items[1][sort_by]
+            for streamer_id, alert_info in dict(sorted(data.items(), key=sorter, reverse=reverse)).items():
+                if str(ctx.guild.id) in alert_info["alert_roles"].keys():
+                    info = alert_info["alert_roles"][str(ctx.guild.id)]
+                    alert_role_id = info.get("role_id", None)
+                    if alert_role_id is None:
+                        alert_role = "<No Alert Role>"
+                    elif alert_role_id == "everyone":
+                        alert_role == "@everyone"
                     else:
-                        alert_role = "@deleted-role"
+                        if alert_role := ctx.guild.get_role(int(alert_role_id)):
+                            alert_role = alert_role.name
+                        else:
+                            alert_role = "@deleted-role"
 
-                channel_override_id = info.get("notif_channel_id", None)
-                channel_override_role = ctx.guild.get_channel(
-                    channel_override_id)
-                if channel_override_role is not None:
-                    channel_override = "#" + channel_override_role.name
-                else:
-                    channel_override = ""
-
-                cache = await self.bot.db.get_channel_cache(PartialUser(streamer_id, alert_info["display_name"].lower(), alert_info["display_name"]))
-                last_live = cache.get("alert_cooldown", "Unknown")
-                if type(last_live) == int:
-                    last_live = datetime.utcfromtimestamp(
-                        last_live).strftime("%d-%m-%y %H:%M")
-
-                page.append(
-                    f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
-                if len(page) == 14:
-                    if pages == []:
-                        pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
+                    channel_override_id = info.get("notif_channel_id", None)
+                    channel_override_role = ctx.guild.get_channel(
+                        channel_override_id)
+                    if channel_override_role is not None:
+                        channel_override = "#" + channel_override_role.name
                     else:
-                        pages.append(
-                            '\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
-                    page = []
+                        channel_override = ""
 
-        if page != []:
-            page = page[:-1] + [page[-1] + "```"]
-            if pages == []:
-                pages.append('\n'.join(page))
-            else:
-                pages.append('\n'.join(["```nim\n"] + page))
-        view = TextPaginator(ctx, pages, show_delete=True)
+                    last_live = alert_info["last_live"]
+                    if last_live == 0:
+                        last_live = "Unknown"
+                    else:
+                        last_live = datetime.utcfromtimestamp(
+                            last_live).strftime("%d-%m-%y %H:%M")
+
+                    page.append(
+                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                    if len(page) == 14:
+                        if pages == []:
+                            pages.append(
+                                '\n'.join(page[:-1] + [page[-1] + "```"]))
+                        else:
+                            pages.append(
+                                '\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
+                        page = []
+
+            if page != []:
+                page = page[:-1] + [page[-1] + "```"]
+                if pages == []:
+                    pages.append('\n'.join(page))
+                else:
+                    pages.append('\n'.join(["```nim\n"] + page))
+            return pages
+        view = SortableTextPaginator(ctx, callbacks, page_generator, sorting_options={
+                                     "display_name": 0, "last_live": 1}, show_delete=True)
         await ctx.send(content=view.pages[0], view=view)
 
     @streamers_list.sub_command(name="youtube", description="List all active youtube streamer alerts setup in this server")
     async def streamers_list_youtube(self, ctx: ApplicationCustomContext):
+        await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_yt_callbacks()
 
         if len(callbacks) == 0:
             return await ctx.send(f"{self.bot.emotes.error} No streamers configured for this server!")
+        for streamer, alert_info in dict(callbacks).items():
+            cache = await self.bot.db.get_yt_channel_cache(streamer)
+            callbacks[streamer]["last_live"] = cache.get(
+                "alert_cooldown", 0)
 
-        await self.bot.wait_until_db_ready()
+        def page_generator(data: dict, sort_by: str, reverse: bool) -> list[str]:
+            pages: list[str] = []
+            page = [
+                f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
+            # The lambda pases the 2 items as a tuple, read the alert_info and return display name
 
-        pages: list[str] = []
-        page = [
-            f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
-        # The lambda pases the 2 items as a tuple, read the alert_info and return display name
-        for channel, alert_info in dict(sorted(callbacks.items(), key=lambda packed_items: packed_items[1]['display_name'].lower())).items():
-            if str(ctx.guild.id) in alert_info["alert_roles"].keys():
-                info = alert_info["alert_roles"][str(ctx.guild.id)]
-                alert_role_id = info.get("role_id", None)
-                if alert_role_id is None:
-                    alert_role = "<No Alert Role>"
-                elif alert_role_id == "everyone":
-                    alert_role == "@everyone"
-                else:
-                    if alert_role := ctx.guild.get_role(int(alert_role_id)):
-                        alert_role = alert_role.name
+            def sorter(items):
+                if type(items[1][sort_by]) == str:
+                    return items[1][sort_by].lower()
+                return items[1][sort_by]
+            for channel, alert_info in dict(sorted(data.items(), key=sorter, reverse=reverse)).items():
+                if str(ctx.guild.id) in alert_info["alert_roles"].keys():
+                    info = alert_info["alert_roles"][str(ctx.guild.id)]
+                    alert_role_id = info.get("role_id", None)
+                    if alert_role_id is None:
+                        alert_role = "<No Alert Role>"
+                    elif alert_role_id == "everyone":
+                        alert_role == "@everyone"
                     else:
-                        alert_role = "@deleted-role"
+                        if alert_role := ctx.guild.get_role(int(alert_role_id)):
+                            alert_role = alert_role.name
+                        else:
+                            alert_role = "@deleted-role"
 
-                channel_override_id = info.get("notif_channel_id", None)
-                channel_override = ctx.guild.get_channel(channel_override_id)
-                if channel_override is not None:
-                    channel_override = "#" + channel_override.name
-                else:
-                    channel_override = ""
-
-                cache = await self.bot.db.get_yt_channel_cache(channel)
-                last_live = cache.get("alert_cooldown", "Unknown")
-                if type(last_live) == int:
-                    last_live = datetime.utcfromtimestamp(
-                        last_live).strftime("%d-%m-%y %H:%M")
-
-                page.append(
-                    f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
-                if len(page) == 14:
-                    if pages == []:
-                        pages.append('\n'.join(page[:-1] + [page[-1] + "```"]))
+                    channel_override_id = info.get("notif_channel_id", None)
+                    channel_override = ctx.guild.get_channel(
+                        channel_override_id)
+                    if channel_override is not None:
+                        channel_override = "#" + channel_override.name
                     else:
-                        pages.append(
-                            '\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
-                    page = []
+                        channel_override = ""
 
-        if page != []:
-            page = page[:-1] + [page[-1] + "```"]
-            if pages == []:
-                pages.append('\n'.join(page))
-            else:
-                pages.append('\n'.join(["```nim\n"] + page))
-        view = TextPaginator(ctx, pages, show_delete=True)
+                    last_live = alert_info["last_live"]
+                    if last_live == 0:
+                        last_live = "Unknown"
+                    else:
+                        last_live = datetime.utcfromtimestamp(
+                            last_live).strftime("%d-%m-%y %H:%M")
+
+                    page.append(
+                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                    if len(page) == 14:
+                        if pages == []:
+                            pages.append(
+                                '\n'.join(page[:-1] + [page[-1] + "```"]))
+                        else:
+                            pages.append(
+                                '\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
+                        page = []
+
+            if page != []:
+                page = page[:-1] + [page[-1] + "```"]
+                if pages == []:
+                    pages.append('\n'.join(page))
+                else:
+                    pages.append('\n'.join(["```nim\n"] + page))
+            return pages
+        view = SortableTextPaginator(ctx, callbacks, page_generator, sorting_options={
+                                     "display_name": 0, "last_live": 1}, show_delete=True)
         await ctx.send(content=view.pages[0], view=view)
 
     @streamers.sub_command_group(name="delete")
