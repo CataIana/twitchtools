@@ -108,7 +108,8 @@ class DB(commands.Cog, name="Database Cog"):
     async def write_title_callback(self, broadcaster: PartialUser, callback: dict):
         if not self.is_connected:
             raise DBConnectionError
-        result = await self._db.tcallbacks.update_one({"_id": str(broadcaster.id)}, {"$set": callback})
+        #result = await self._db.tcallbacks.update_one({"_id": str(broadcaster.id)}, {"$set": callback})
+        result = await self._db.tcallbacks.replace_one({"_id": str(broadcaster.id)}, callback)
         if result.matched_count == 0:
             callback.update({"_id": str(broadcaster.id)})
             await self._db.tcallbacks.insert_one(callback)

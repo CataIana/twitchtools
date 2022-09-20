@@ -120,7 +120,10 @@ class RecieverWebServer:
             data = (await request.read()).decode('utf-8')
             return await self.youtube_notification(PartialYoutubeUser(channel, callback["display_name"]), data)
         else:
-            callbacks = await self.bot.db.get_all_callbacks()
+            if callback_type == "titlecallback":
+                callbacks = await self.bot.db.get_all_title_callbacks()
+            else:
+                callbacks = await self.bot.db.get_all_callbacks()
             try:
                 channel_id = [id for id, c in callbacks.items(
                 ) if c["display_name"].lower() == channel][0]

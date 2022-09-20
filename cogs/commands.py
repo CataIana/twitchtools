@@ -484,7 +484,17 @@ class CommandsCog(commands.Cog):
         if callback == {}:
             make_subscriptions = True
             callback = {"display_name": streamer.display_name,
-                        "secret": self.bot.random_string_generator(21), "alert_roles": {}}
+                        "alert_roles": {}}
+            # Check title updates callback if it already has a title changes subscription
+            title_callback = await self.bot.db.get_title_callback(streamer)
+            if title_callback:
+                callback["secret"] = title_callback["secret"]
+                callback["title_id"] = title_callback["subscription_id"]
+                del title_callback["subscription_id"]
+                del title_callback["secret"]
+                await self.bot.db.write_title_callback(streamer, title_callback)
+            else:
+                callback["secret"] = self.bot.random_string_generator(21)
 
         callback["alert_roles"][str(ctx.guild.id)] = {
             "mode": mode, "notif_channel_id": notification_channel.id}
@@ -514,10 +524,12 @@ class CommandsCog(commands.Cog):
                 callback["online_id"] = sub1.id
                 sub2 = await self.bot.tapi.create_subscription(SubscriptionType.STREAM_OFFLINE, streamer=streamer, secret=callback["secret"], alert_type=AlertType.status)
                 callback["offline_id"] = sub2.id
-                sub3 = await self.bot.tapi.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callback["secret"], alert_type=AlertType.title)
-                callback["title_id"] = sub3.id
+                # Don't create a title updates subscription if we can take it from title updates callback
+                if callback.get("title_id", None) is None:
+                    sub3 = await self.bot.tapi.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callback["secret"], alert_type=AlertType.title)
+                    callback["title_id"] = sub3.id
             except SubscriptionError as e:
-                await self.callback_deletion(ctx, streamer, alert_type=AlertType.status)
+                await self.twitch_callback_deletion(ctx, streamer, alert_type=AlertType.status)
                 raise SubscriptionError(str(e))
 
         await self.bot.db.write_callback(streamer, callback)
@@ -888,7 +900,7 @@ class CommandsCog(commands.Cog):
 
         if title_callback is None:
             title_callback = {
-                "channel_id": streamer.id, "alert_roles": {}}
+                "display_name": streamer.display_name, "alert_roles": {}}
 
         title_callback["alert_roles"][str(ctx.guild.id)] = {
             "notif_channel_id": notification_channel.id}
@@ -901,6 +913,18 @@ class CommandsCog(commands.Cog):
         else:
             title_callback["alert_roles"][str(
                 ctx.guild.id)]["role_id"] = alert_role.id
+
+        if await self.bot.db.get_callback(streamer) is None:
+            title_callback["secret"] = self.bot.random_string_generator(21)
+            await self.bot.db.write_title_callback(streamer, title_callback)
+            if not ctx.response.is_done():
+                await ctx.response.defer()
+            try:
+                sub = await self.bot.tapi.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=title_callback["secret"], alert_type=AlertType.title)
+                title_callback["subscription_id"] = sub.id
+            except SubscriptionError as e:
+                await self.twitch_callback_deletion(ctx, streamer, alert_type=AlertType.title)
+                raise SubscriptionError(str(e))
 
         await self.bot.db.write_title_callback(streamer, title_callback)
 
@@ -992,14 +1016,19 @@ class CommandsCog(commands.Cog):
                 f"Twitch streamer {streamer.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
             await self.bot.wait_until_db_ready()
             if alert_type == AlertType.status:
-                try:
-                    await self.bot.tapi.delete_subscription(callback["offline_id"])
-                    await self.bot.tapi.delete_subscription(callback["online_id"])
+                await self.bot.tapi.delete_subscription(callback["offline_id"])
+                await self.bot.tapi.delete_subscription(callback["online_id"])
+                # Hand off subscription to title callback if it is defined for the streamer
+                if title_callback := await self.bot.db.get_title_callback(streamer):
+                    title_callback["subscription_id"] = callback["title_id"]
+                    title_callback["secret"] = callback["secret"]
+                    await self.bot.db.write_title_callback(streamer, title_callback)
+                else:
                     await self.bot.tapi.delete_subscription(callback["title_id"])
-                except KeyError:
-                    pass
                 await self.bot.db.delete_channel_cache(streamer)
             else:
+                if callback.get("subscription_id", None):
+                    await self.bot.tapi.delete_subscription(callback["subscription_id"])
                 await self.bot.db.delete_title_cache(streamer)
             if alert_type.name == "status":
                 await self.bot.db.delete_callback(streamer)
