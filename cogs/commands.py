@@ -26,6 +26,12 @@ from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
 
 LEASE_SECONDS = 828000
 
+READABLE_MODES = {
+    0: "Notification + Temp Channel",
+    1: "Notification Only",
+    2: "Notification + Persistent Channel"
+}
+
 class TimestampOptions(Enum):
     short_time = "t"  # 1:21 PM
     long_time = "T"  # 1:21:08 PM
@@ -746,7 +752,7 @@ class CommandsCog(commands.Cog):
                             last_live).strftime("%d-%m-%y %H:%M")
 
                     page.append(
-                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}")
                     if len(page) == 14:
                         if pages == []:
                             pages.append(
@@ -819,7 +825,7 @@ class CommandsCog(commands.Cog):
                             last_live).strftime("%d-%m-%y %H:%M")
 
                     page.append(
-                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {info.get('mode', 2)}")
+                        f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}")
                     if len(page) == 14:
                         if pages == []:
                             pages.append(
