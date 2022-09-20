@@ -160,7 +160,7 @@ class http_twitch:
                                            },
                                            "transport": {
                                                "method": "webhook",
-                                               "callback": f"{self.callback_url}/{alert_type.value}/{streamer.username.lower()}",
+                                               "callback": f"{self.callback_url}/{alert_type.value}/{streamer.user_id}",
                                                "secret": secret
                                            }
                                        }, method="post")

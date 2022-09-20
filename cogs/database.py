@@ -69,6 +69,14 @@ class DB(commands.Cog, name="Database Cog"):
             return callback
         return None
 
+    async def get_callback_by_id(self, broadcaster_id: int) -> Optional[dict]:
+        if not self.is_connected:
+            raise DBConnectionError
+        callback = await self._db.callbacks.find_one({"_id": str(broadcaster_id)})
+        if callback:
+            return callback
+        return None
+
     async def write_callback(self, broadcaster: PartialUser, callback: dict):
         if not self.is_connected:
             raise DBConnectionError
@@ -101,6 +109,14 @@ class DB(commands.Cog, name="Database Cog"):
         if not self.is_connected:
             raise DBConnectionError
         callback = await self._db.tcallbacks.find_one({"_id": str(broadcaster.id)})
+        if callback:
+            return callback
+        return None
+
+    async def get_title_callback_by_id(self, broadcaster_id: int) -> Optional[dict]:
+        if not self.is_connected:
+            raise DBConnectionError
+        callback = await self._db.tcallbacks.find_one({"_id": str(broadcaster_id)})
         if callback:
             return callback
         return None
@@ -210,9 +226,17 @@ class DB(commands.Cog, name="Database Cog"):
     async def get_yt_callback(self, channel: PartialYoutubeUser) -> Optional[dict]:
         if not self.is_connected:
             raise DBConnectionError
-        yt_alert = await self._db.yt_callbacks.find_one({"_id": channel.id})
-        if yt_alert:
-            return yt_alert
+        yt_callback = await self._db.yt_callbacks.find_one({"_id": channel.id})
+        if yt_callback:
+            return yt_callback
+        return None
+
+    async def get_yt_callback_by_id(self, channel_id: str) -> Optional[dict]:
+        if not self.is_connected:
+            raise DBConnectionError
+        yt_callback = await self._db.yt_callbacks.find_one({"_id": channel_id})
+        if yt_callback:
+            return yt_callback
         return None
 
     async def write_yt_callback(self, channel: PartialYoutubeUser, callback: dict):
