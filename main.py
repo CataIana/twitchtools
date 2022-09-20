@@ -16,9 +16,9 @@ from disnake.ext import commands
 
 from cogs.database import DB
 from cogs.webserver import RecieverWebServer
-from twitchtools import (AlertOrigin, BadAuthorization, CustomConnectionState,
-                         PartialUser, PartialYoutubeUser, Ratelimit,
-                         http_twitch, http_youtube)
+from twitchtools import (BadAuthorization, CustomConnectionState, PartialUser,
+                         PartialYoutubeUser, Ratelimit, http_twitch,
+                         http_youtube)
 
 ACXT = TypeVar(
     "ACXT", bound="disnake.interactions.ApplicationCommandInteraction")
