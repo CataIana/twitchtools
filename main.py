@@ -78,10 +78,10 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.load_extension("cogs.queue_handler")
         # General commands cog
         self.load_extension("cogs.commands")
-        # Twitch related commands cog
-        self.load_extension("cogs.twitch_commands")
-        # Youtube related commands cog
-        self.load_extension("cogs.youtube_commands")
+        # # Twitch related commands cog
+        # self.load_extension("cogs.twitch_commands")
+        # # Youtube related commands cog
+        # self.load_extension("cogs.youtube_commands")
         # Catches and handles exceptions
         self.load_extension("cogs.error_listener")
         # Cleans up database on being removed from servers
