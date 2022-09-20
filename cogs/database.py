@@ -40,7 +40,7 @@ class DB(commands.Cog, name="Database Cog"):
             self._uri, serverSelectionTimeoutMS=self._timeout)
         try:
             await self._mongo.server_info()
-            self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo["twitchtoolstest"]
+            self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo["twitchtools"]
             self.bot._db_ready.set()
             self.bot.log.info("Connected to database")
         except Exception as e:
