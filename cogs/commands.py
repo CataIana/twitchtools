@@ -32,6 +32,12 @@ READABLE_MODES = {
     2: "Notification + Persistent Channel"
 }
 
+
+class PlatformChoice(str, Enum):
+    Youtube = "youtube"
+    Twitch = "twitch"
+
+
 class TimestampOptions(Enum):
     short_time = "t"  # 1:21 PM
     long_time = "T"  # 1:21:08 PM
@@ -434,20 +440,32 @@ class CommandsCog(commands.Cog):
     async def streamers_add(self, ctx: ApplicationCustomContext):
         pass
 
-    @streamers_add.sub_command(name="twitch_mode_zero", description="Dynamic notification + Temporary live status channel for a twitch channel")
-    async def streamers_add_twitch_mode_0(self, ctx: ApplicationCustomContext, streamer_username: str,
-                                          notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_twitch(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+    @streamers_add.sub_command(name="mode_zero", description="Dynamic notification + Temporary live status channel for a channel")
+    async def streamers_add_mode_0(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
+                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        if platform == PlatformChoice.Twitch:
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+        elif platform == PlatformChoice.Youtube:
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+        return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
-    @streamers_add.sub_command(name="twitch_mode_one", description="Only sends a dynamic live notification for a twitch live stream")
-    async def streamers_add_twitch_mode_1(self, ctx: ApplicationCustomContext, streamer_username: str,
-                                          notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_twitch(ctx, streamer_username, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
+    @streamers_add.sub_command(name="mode_one", description="Only sends a dynamic live notification for a live stream")
+    async def streamers_add_mode_1(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
+                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        if platform == PlatformChoice.Twitch:
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
+        elif platform == PlatformChoice.Youtube:
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
+        return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
-    @streamers_add.sub_command(name="twitch_mode_two", description="Dynamic live notification + Persistent text channel reporting twitch channel live status")
-    async def streamers_add_twitch_mode_2(self, ctx: ApplicationCustomContext, streamer_username: str,
-                                          notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_twitch(ctx, streamer_username, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+    @streamers_add.sub_command(name="mode_two", description="Dynamic live notification + Persistent text channel reporting channel live status")
+    async def streamers_add_mode_2(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
+                                   notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+        if platform == PlatformChoice.Twitch:
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+        elif platform == PlatformChoice.Youtube:
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+        return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     async def addstreamer_twitch(self, ctx: ApplicationCustomContext, streamer_username: str,
                                  notification_channel: TextChannel, mode: int, alert_role: Role = None,
@@ -455,8 +473,10 @@ class CommandsCog(commands.Cog):
         # Run checks on all the supplied arguments
         streamer = await self.bot.tapi.get_user(user_login=streamer_username)
         if not streamer:
-            raise commands.BadArgument(
-                f"Could not find twitch user {streamer_username}!")
+            streamer = await self.bot.tapi.get_user(user_id=streamer_username)
+            if not streamer:
+                raise commands.BadArgument(
+                    f"Could not locate twitch channel {streamer_username}!")
         check_channel_permissions(ctx, channel=notification_channel)
         if status_channel is not None:
             check_channel_permissions(ctx, channel=status_channel)
@@ -567,21 +587,6 @@ class CommandsCog(commands.Cog):
             embed.add_field(name="Custom Alert Message",
                             value=custom_live_message, inline=False)
         await ctx.send(embed=embed)
-
-    @streamers_add.sub_command(name="youtube_mode_zero", description="Dynamic notification + Temporary live status channel for a youtube channel")
-    async def streamers_add_youtube_mode_0(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
-                                           notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_youtube(ctx, channel_id_or_display_name, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
-
-    @streamers_add.sub_command(name="youtube_mode_one", description="Only sends a dynamic live notification for a youtube live stream")
-    async def streamers_add_youtube_mode_1(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
-                                           notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_youtube(ctx, channel_id_or_display_name, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
-
-    @streamers_add.sub_command(name="youtube_mode_two", description="Dynamic live notification + Persistent text channel reporting youtube channel live status")
-    async def streamers_add_youtube_mode_2(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
-                                           notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
-        await self.addstreamer_youtube(ctx, channel_id_or_display_name, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
 
     async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
                                   notification_channel: TextChannel, mode: int, alert_role: Role = None,

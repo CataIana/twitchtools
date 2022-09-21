@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pickletools import string1
 from typing import TYPE_CHECKING, Optional, Union
 
 from aiohttp import ClientSession
@@ -247,11 +246,12 @@ class http_youtube:
                     rj = await r.json()
                     api_ids = [item["contentDetails"]["videoId"]
                                for item in rj.get("items", [])]
-                except Exception:
-                    pass
-                for id in api_ids:
-                    if id not in ids_dict[channel]:
-                        ids_dict[channel].append(id)
+                    for id in api_ids:
+                        if id not in ids_dict[channel]:
+                            ids_dict[channel].append(id)
+                except Exception as e:
+                    self.bot.log.error(
+                        f"Exception fetching uploads playlist for {channel.display_name}: {str(e)}")
         return ids_dict
 
     async def are_videos_live(self, video_ids: dict[PartialYoutubeUser, list[str]]) -> dict[PartialYoutubeUser, str]:
