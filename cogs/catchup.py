@@ -34,8 +34,8 @@ class Catchup(commands.Cog):
     @commands.is_owner()
     async def catchup(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        await self.bot.twitch_catchup()
-        await self.bot.youtube_catchup()
+        await self.twitch_catchup()
+        await self.youtube_catchup()
         self.bot.log.info("Finished manual catchup")
         await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
 
