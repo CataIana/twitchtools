@@ -209,7 +209,5 @@ class RecieverWebServer:
 
         if video:
             self.bot.queue.put_nowait(video)
-        else:
-            self.bot.queue.put_nowait(channel)
 
         return web.Response(status=202)

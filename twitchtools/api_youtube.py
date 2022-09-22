@@ -198,7 +198,7 @@ class http_youtube:
         if id == last_vid_id:
             self.bot.log.info(
                 f"{display_name} updated latest video, ignoring.")
-            return None
+            return await self.get_stream(id)
 
         # Check video exists
         video = await self.get_stream(id)
