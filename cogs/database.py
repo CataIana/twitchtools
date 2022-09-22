@@ -276,12 +276,12 @@ class DB(commands.Cog, name="Database Cog"):
             return cache_data
         return None
 
-    async def update_last_yt_vid(self, channel: PartialYoutubeUser, video: YoutubeVideo):
+    async def update_last_yt_vid(self, video: YoutubeVideo):
         if not self.is_connected:
             raise DBConnectionError
-        result = await self._db.yt_cache.replace_one({"_id": channel.id}, {"video_id": video.id, "publish_time": video.published_at.timestamp()})
+        result = await self._db.yt_cache.replace_one({"_id": video.channel.id}, {"video_id": video.id, "publish_time": video.published_at.timestamp()})
         if result.matched_count == 0:
-            await self._db.yt_cache.insert_one({"_id": channel.id, "video_id": video.id, "publish_time": video.published_at.timestamp()})
+            await self._db.yt_cache.insert_one({"_id": video.channel.id, "video_id": video.id, "publish_time": video.published_at.timestamp()})
 
     async def get_yt_channel_cache(self, channel: PartialYoutubeUser) -> YoutubeChannelCache:
         if not self.is_connected:

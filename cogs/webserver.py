@@ -209,5 +209,8 @@ class RecieverWebServer:
 
         if video:
             self.bot.queue.put_nowait(video)
+        # The webserver can never trigger an offline event, only catchup can.
+        # else:
+        #     self.bot.queue.put_nowait(channel)
 
         return web.Response(status=202)

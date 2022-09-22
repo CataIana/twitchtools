@@ -212,10 +212,10 @@ class http_youtube:
                 f"{video.channel.display_name} updated a video, ignoring.")
             return None
 
-        await self.bot.db.update_last_yt_vid(video.channel, video)
+        await self.bot.db.update_last_yt_vid(video)
 
         self.bot.log.debug(
-            f"Youtube video confirmed as new for {video.channel.display_name}")
+            f"Youtube stream confirmed as new for {video.channel.display_name}")
 
         return video
 
