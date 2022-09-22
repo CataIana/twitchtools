@@ -308,3 +308,13 @@ class YoutubeChannelCache(Enum):
     live_alerts: dict[str, int]
     last_update: int
     reusable_alerts: list[dict[str, int]]
+
+
+class Emotes(Enum):
+    error: str = "❌"
+    success: str = "✅"
+
+    # Override str conversion to return value so we don't have to add .value to every usage
+    def __str__(self):
+        # return "%s.%s" % (self.__class__.__name__, self._name_)
+        return self._value_

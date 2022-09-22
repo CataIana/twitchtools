@@ -4,7 +4,6 @@ import json
 import logging
 import sys
 from asyncio import Event, Queue
-from enum import Enum
 from random import choice
 from string import ascii_letters
 from time import time
@@ -16,22 +15,12 @@ from disnake.ext import commands
 
 from cogs.database import DB
 from cogs.webserver import RecieverWebServer
-from twitchtools import (BadAuthorization, CustomConnectionState, PartialUser,
-                         PartialYoutubeUser, Ratelimit, http_twitch,
-                         http_youtube)
+from twitchtools import (BadAuthorization, CustomConnectionState, Emotes,
+                         PartialUser, PartialYoutubeUser, Ratelimit,
+                         http_twitch, http_youtube)
 
 ACXT = TypeVar(
     "ACXT", bound="disnake.interactions.ApplicationCommandInteraction")
-
-
-class Emotes(Enum):
-    error: str = "❌"
-    success: str = "✅"
-
-    # Override str conversion to return value so we don't have to add .value to every usage
-    def __str__(self):
-        # return "%s.%s" % (self.__class__.__name__, self._name_)
-        return self._value_
 
 
 class TwitchCallBackBot(commands.InteractionBot):
@@ -64,7 +53,6 @@ class TwitchCallBackBot(commands.InteractionBot):
 
         self.web_server = RecieverWebServer(
             self, port=config["webserver_port"])
-        self.loop.run_until_complete(self.web_server.start())
 
         self.db_connect_uri = config["mongodb_uri"]
         self._db_ready: Event = Event()
@@ -119,6 +107,7 @@ class TwitchCallBackBot(commands.InteractionBot):
     @commands.Cog.listener()
     async def on_connect(self):
         self.aSession: ClientSession = ClientSession()  # Make the aiohttp session asap
+        await self.web_server.start()
 
     @commands.Cog.listener()
     async def on_ready(self):
