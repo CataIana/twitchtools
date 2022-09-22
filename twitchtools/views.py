@@ -142,7 +142,7 @@ class SortableTextPaginator(View):
         self.update_button_state()
 
     def render_pages(self):
-        self.pages = self._page_generator(
+        self.pages = self._page_generator(self.ctx,
             self._data, list(self.sorting_options.keys())[self.sort_by_index], list(self.sorting_options.values())[self.sort_by_index])
 
     def update_button_state(self):
