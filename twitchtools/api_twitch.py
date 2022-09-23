@@ -95,7 +95,7 @@ class http_twitch:
         else:
             raise BadRequest
         j = await r.json()
-        if j["data"] == []:
+        if j.get("data", []) == []:
             return None
         json_data = j["data"][0]
         return User(**json_data)
@@ -112,7 +112,7 @@ class http_twitch:
             join = '&'.join(chunk)
             r = await self._request(f"{self.base}/streams?{join}")
             j = await r.json()
-            for stream in j["data"]:
+            for stream in j.get("data", []):
                 s = Stream(**stream)
                 s.origin = origin
                 streams.append(s)
@@ -121,7 +121,7 @@ class http_twitch:
     async def get_stream(self, user: Union[PartialUser, User], origin: AlertOrigin = AlertOrigin.unavailable) -> Union[Stream, None]:
         r = await self._request(f"{self.base}/streams?user_login={user}")
         j = await r.json()
-        if j["data"] == []:
+        if j.get("data", []) == []:
             return None
         json_data = j["data"][0]
         s = Stream(**json_data)
@@ -131,7 +131,7 @@ class http_twitch:
     async def get_subscription(self, id: str) -> Union[Subscription, None]:
         r = await self._request(f"{self.base}/eventsub/subscriptions")
         rj = await r.json()
-        for sub in rj["data"]:
+        for sub in rj.get("data", []):
             if sub["id"] == id:
                 return Subscription(**sub)
         return None
@@ -140,7 +140,7 @@ class http_twitch:
         r = await self._request(f"{self.base}/eventsub/subscriptions")
         rj = await r.json()
         subs = []
-        for sub in rj["data"]:
+        for sub in rj.get("data", []):
             subs.append(Subscription(**sub))
         return subs
 
@@ -198,21 +198,21 @@ class http_twitch:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
         vids = []
-        for vid in rj["data"]:
+        for vid in rj.get("data", []):
             vids.append(Video(**vid))
         return vids
 
     async def get_video(self, video_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?id={video_id}")
         rj = await r.json()
-        for vid in rj["data"]:
+        for vid in rj.get("data", []):
             return Video(**vid)
         return None
 
     async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
-        for vid in rj["data"]:
+        for vid in rj.get("data", []):
             if int(vid['stream_id']) == stream_id:
                 return Video(**vid)
         return None
