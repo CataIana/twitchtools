@@ -276,9 +276,8 @@ class CommandsCog(commands.Cog):
 
     @commands.slash_command(description="Evalute a string as a command")
     @commands.is_owner()
-    async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True):
+    async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True, show_all: bool = False):
         command = command.split(":")[0]
-        show_all = False
         code_string = "```nim\n{}```"
         if command.startswith("`") and command.endswith("`"):
             command = command[1:][:-1]
