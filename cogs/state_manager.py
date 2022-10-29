@@ -9,9 +9,8 @@ from disnake.utils import utcnow
 
 from twitchtools import (AlertOrigin, PartialUser, PartialYoutubeUser, Stream,
                          TitleEvent, User, YoutubeUser, YoutubeVideo,
-                         human_timedelta)
+                         YoutubeVideoType, human_timedelta)
 from twitchtools.enums import ChannelCache, YoutubeChannelCache
-from twitchtools.user import PartialYoutubeUser, YoutubeUser
 
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
@@ -335,6 +334,7 @@ class StreamStateManager(commands.Cog):
 
         self.bot.log.info(f"{stream.user.username} => ONLINE (Twitch)")
 
+        # Update cached display name
         if callback["display_name"] != stream.user.display_name:
             callback["display_name"] = stream.user.display_name
             await self.bot.db.write_callback(stream.user, callback)
@@ -481,7 +481,7 @@ class StreamStateManager(commands.Cog):
         callback = await self.bot.db.get_yt_callback(video.channel)
         on_cooldown = self.on_cooldown(channel_cache.get("alert_cooldown", 0))
 
-        # Do not re-run this function is the streamer is already live
+        # Update title details if streamer is already live
         if self.is_live(channel_cache):
             if video.id == channel_cache.video_id:
                 title_cache = await self.bot.db.get_yt_title_cache(video.channel)
@@ -520,6 +520,7 @@ class StreamStateManager(commands.Cog):
         self.bot.log.info(
             f"{video.user.display_name} => ONLINE (Youtube)")
 
+        # Update cached display name
         if callback["display_name"] != video.user.display_name:
             callback["display_name"] = video.user.display_name
             await self.bot.db.write_yt_callback(video.user, callback)
@@ -552,6 +553,9 @@ class StreamStateManager(commands.Cog):
         for guild_id, alert_info in callback["alert_roles"].items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
+                continue
+
+            if video.type == YoutubeVideoType.premiere and not alert_info["enable_premieres"]:
                 continue
 
             # Format role mention

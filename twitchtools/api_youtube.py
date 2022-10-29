@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from bs4 import BeautifulSoup
 
-from .enums import AlertOrigin
+from .enums import AlertOrigin, YoutubeVideoType
 from .exceptions import *
 from .subscription import YoutubeSubscription
 from .user import PartialYoutubeUser, YoutubeUser
@@ -49,11 +49,13 @@ class http_youtube:
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
-    async def get_user(self, user: PartialYoutubeUser = None, user_id: str = None, display_name: int = None) -> Optional[YoutubeUser]:
+    async def get_user(self, user: PartialYoutubeUser = None, user_id: str = None, display_name: str = None, user_name: str = None) -> Optional[YoutubeUser]:
         if user is not None:
             r = await self._request(f"{self.base}/channels?id={user.id}&part=snippet")
         elif user_id is not None:
             r = await self._request(f"{self.base}/channels?id={user_id}&part=snippet")
+        elif user_name is not None:
+            r = await self._request(f"{self.base}/channels?forUsername={user_name}&part=snippet")
         elif display_name is not None:
             resp = await self.bot.aSession.get(f"https://youtube.com/{display_name}")
             soup = BeautifulSoup(await resp.text(), 'html.parser')
@@ -63,7 +65,6 @@ class http_youtube:
             except TypeError:
                 return None
             r = await self._request(f"{self.base}/channels?id={channel_id}&part=snippet")
-            # r = await self._request(f"{self.base}/users?login={user_login}")
         else:
             raise BadRequest
         j = await r.json()
@@ -136,6 +137,23 @@ class http_youtube:
             return True
         return False
 
+    # Iffy check, needs confirmation
+    def is_premiere(self, item: dict) -> bool:
+        status_details = item.get("status", {})
+        # uploadStatus will be "uploaded" when it is a live stream
+        #self.bot.log.info(f"{item['id']} Is premiere: {'Yes' if status_details['uploadStatus'] == 'processed' else 'No'}. Upload status: {item['status']['uploadStatus']}")
+        if status_details["uploadStatus"] == "processed":
+            return True
+        return False
+
+    def get_video_type(self, item: dict) -> YoutubeVideoType:
+        video_type = "video"
+        if item.get("liveStreamingDetails", {}).get("actualStartTime", None) is not None:
+            video_type = "stream"
+            if item["status"]["uploadStatus"] == "processed":
+                video_type = "premiere"
+        return YoutubeVideoType(video_type)
+
     async def has_video_ended(self, video_id: str) -> Union[str, bool]:
         stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails")
         stream_json = await stream.json()
@@ -149,7 +167,7 @@ class http_youtube:
         ended_videos = []
         all_ids = []
         for chunk in self.chunks(video_ids, 50):
-            stream = await self._request(f"{self.base}/videos?id={','.join(chunk)}&part=liveStreamingDetails")
+            stream = await self._request(f"{self.base}/videos?id={','.join(chunk)}&part=liveStreamingDetails,status")
             stream_json = await stream.json()
             for item in stream_json.get("items", []):
                 if self.is_stream(item) and self.has_stream_ended(item):
@@ -161,14 +179,17 @@ class http_youtube:
         return ended_videos
 
     async def get_stream(self, video_id: str, alert_origin: AlertOrigin = AlertOrigin.callback) -> Optional[YoutubeVideo]:
-        stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails")
+        stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails,status")
         stream_json = await stream.json()
         # Check if video is a stream first
         if stream_json.get("items", []) != []:
-            if not self.is_stream(stream_json["items"][0]):
-                return None
+            item = stream_json["items"][0]
+            if not self.is_stream(item):
+                raise VideoNotStream(video_id, video_type=self.get_video_type(item).value)
+            if self.has_stream_ended(item):
+                raise VideoStreamEnded(video_id)
         else:
-            return None
+            raise VideoNotFound(video_id)
         # Fetch more info if stream is live
         snippet_content = await self._request(f"{self.base}/videos?id={video_id}&part=snippet,contentDetails")
         snippet_content_json = await snippet_content.json()
@@ -176,7 +197,8 @@ class http_youtube:
         return YoutubeVideo(video_id,
                             snippet_content_json["items"][0]["snippet"],
                             snippet_content_json["items"][0]["contentDetails"],
-                            stream_json["items"][0].get("liveStreamingDetails", None), alert_origin=alert_origin)
+                            item["status"],
+                            item["liveStreamingDetails"], video_type=self.get_video_type(item), alert_origin=alert_origin)
 
     async def parse_video_xml(self, channel: PartialYoutubeUser, request_content: str) -> Optional[YoutubeVideo]:
         soup = BeautifulSoup(request_content, "lxml")
@@ -185,9 +207,13 @@ class http_youtube:
         try:
             id = soup.find_all("yt:videoid")[0].text
         except IndexError:  # This is a video deletion/unpublish message, ignore
+            deleted_video_id = soup.find("link")["href"].split("watch?v=")[-1]
+            channel_cache = await self.bot.db.get_yt_channel_cache(channel)
+            if channel_cache.is_live and channel_cache.video_id == deleted_video_id:
+                self.bot.queue.put_nowait(channel)
             self.bot.log.info(
-                f"{display_name} deleted a video, ignoring.")
-            return None
+                f"{display_name} deleted video {deleted_video_id}")
+            return
         #channel_id = soup.find_all("yt:channelid")[0].text
 
         last_vid = await self.bot.db.get_last_yt_vid(channel) or {}
@@ -197,31 +223,47 @@ class http_youtube:
         # Check video in cache
         if id == last_vid_id:
             self.bot.log.info(
-                f"{display_name} updated latest video, ignoring.")
-            return await self.get_stream(id)
+                f"{display_name} updated latest video {id}")
+            try:
+                return await self.get_stream(id)
+            except VideoNotFound:
+                self.bot.log.info(f"{display_name}: {str(e)}")
+                return
+            except VideoNotStream as e:
+                self.bot.log.info(f"{display_name}: {str(e)}")
+                return
+            except VideoStreamEnded:
+                self.bot.log.info(f"{display_name}: {str(e)}")
+                return
 
         # Check video exists
-        video = await self.get_stream(id)
-        if video is None:
-            self.bot.log.info(
-                f"Video from {display_name} doesn't exist or is not a stream, ignoring.")
-            return None
+        try:
+            video = await self.get_stream(id)
+        except VideoNotFound:
+            self.bot.log.info(f"{display_name}: {str(e)}")
+            return
+        except VideoNotStream as e:
+            self.bot.log.info(f"{display_name}: {str(e)}")
+            return
+        except VideoStreamEnded:
+            self.bot.log.info(f"{display_name}: {str(e)}")
+            return
 
         if video.published_at.timestamp() < last_vid_publish_time:
             self.bot.log.info(
-                f"{video.channel.display_name} updated a video, ignoring.")
-            return None
+                f"{display_name} updated older video with {id}, ignoring")
+            return
 
         await self.bot.db.update_last_yt_vid(video)
 
         self.bot.log.debug(
-            f"Youtube stream confirmed as new for {video.channel.display_name}")
+            f"Video {id} confirmed as new youtube stream for {display_name}")
 
         return video
 
     async def is_channel_live(self, channel: PartialYoutubeUser) -> Optional[str]:
         if ids := (await self.get_recent_video_ids(channel)).get(channel, None):
-            stream = await self._request(f"{self.base}/videos?id={','.join(ids)}&part=liveStreamingDetails")
+            stream = await self._request(f"{self.base}/videos?id={','.join(ids)}&part=liveStreamingDetails,status")
             stream_json = await stream.json()
             # Check if video is a stream and return ID if so
             for item in stream_json["items"]:
@@ -260,7 +302,7 @@ class http_youtube:
         for ids in video_ids.values():
             all_ids += ids
         for chunk in self.chunks(all_ids, 50):
-            stream = await self._request(f"{self.base}/videos?id={','.join(chunk)}&part=liveStreamingDetails")
+            stream = await self._request(f"{self.base}/videos?id={','.join(chunk)}&part=liveStreamingDetails,status")
             stream_json = await stream.json()
             # Check if video is a stream and return ID if so
             for item in stream_json["items"]:

@@ -29,3 +29,15 @@ class RateLimitExceeded(TwitchToolsException):
 class DBConnectionError(TwitchToolsException):
     def __init__(self, message: str = None):
         super().__init__(message or "Not connected to database!")
+
+class VideoNotFound(TwitchToolsException):
+    def __init__(self, video_id: str):
+        super().__init__(f"Video {video_id} not found")
+
+class VideoNotStream(TwitchToolsException):
+    def __init__(self, video_id: str, video_type: str):
+        super().__init__(f"Video {video_id} is a {video_type}")
+
+class VideoStreamEnded(TwitchToolsException):
+    def __init__(self, video_id: str):
+        super().__init__(f"Video {video_id} is a livestream that has already ended")

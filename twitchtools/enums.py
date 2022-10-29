@@ -318,3 +318,8 @@ class Emotes(Enum):
     def __str__(self):
         # return "%s.%s" % (self.__class__.__name__, self._name_)
         return self._value_
+
+class YoutubeVideoType(Enum):
+    video = "video"
+    premiere = "premiere"
+    livestream = "livestream"

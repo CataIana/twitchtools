@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 from disnake.ext import commands, tasks
 
 from twitchtools import AlertOrigin, ApplicationCustomContext, PartialUser
+from twitchtools.exceptions import (VideoNotFound, VideoNotStream,
+                                    VideoStreamEnded)
 
 if TYPE_CHECKING:
     from twitchtools import TwitchCallBackBot
@@ -100,12 +102,26 @@ class Catchup(commands.Cog):
                     self.bot.queue.put_nowait(channel)
                 else:
                     # Video requested here purely for title updates
-                    video = await self.bot.yapi.get_stream(caches[channel].video_id, alert_origin=AlertOrigin.catchup)
+                    try:
+                        video = await self.bot.yapi.get_stream(caches[channel].video_id, alert_origin=AlertOrigin.catchup)
+                    except VideoStreamEnded:
+                        continue
+                    except VideoNotStream:
+                        continue
+                    except VideoNotFound:
+                        continue
                     self.bot.queue.put_nowait(video)
             else:
                 # Otherwise, check if channel is live, and fetch video that is live
                 if video_id := new_live_channels.get(channel, None):
-                    video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                    try:
+                        video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                    except VideoStreamEnded:
+                        continue
+                    except VideoNotStream:
+                        continue
+                    except VideoNotFound:
+                        continue
                     # Update display name if needed
                     if callback_info["display_name"] != video.user.display_name:
                         callback_info["display_name"] = video.user.display_name

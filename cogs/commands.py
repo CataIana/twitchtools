@@ -180,11 +180,13 @@ class CommandsCog(commands.Cog):
         alert_count = 0
         for data in callbacks.values():
             alert_count += len(data["alert_roles"].values())
-        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimestampOptions.long_date_short_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**⚙️ Cogs:** {len(self.bot.cogs)}\n**📈 Commands:** {len(self.bot.slash_commands)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Streamers:** {len(callbacks.keys())}\n**<:notaggy:891702828756766730> Notification Count:** {alert_count}"
+        yt_callbacks = await self.bot.db.get_all_yt_callbacks()
+        yt_alert_count = 0
+        for data in yt_callbacks.values():
+            yt_alert_count += len(data["alert_roles"].values())
+        botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimestampOptions.long_date_short_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Twitch Streamers:** {len(callbacks.keys())}\n**<:Youtube:1034338274220703756> Subscribed YT Channels:** {len(yt_callbacks.keys())}\n**<:notaggy:891702828756766730> Twitch Notification Count:** {alert_count}\n**<:notaggy:891702828756766730> Youtube Notification Count:** {yt_alert_count}"
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
-        memory = psutil.virtual_memory()
-        cpu_freq = psutil.cpu_freq()
-        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Disnake Version:** {disnake.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**<:microprocessor:879591544070488074> System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
+        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Disnake Version:** {disnake.__version__}\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB"
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name,
                          icon_url=self.bot.user.display_avatar.with_size(128))
@@ -441,29 +443,38 @@ class CommandsCog(commands.Cog):
 
     @streamers_add.sub_command(name="mode_zero", description="Dynamic notification + Temporary live status channel for a channel")
     async def streamers_add_mode_0(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
-            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+                custom_live_message=custom_live_message, mode=0)
         elif platform == PlatformChoice.Youtube:
-            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=0)
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+                custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=0)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_one", description="Only sends a dynamic live notification for a live stream")
     async def streamers_add_mode_1(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
-            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+                custom_live_message=custom_live_message, mode=1)
         elif platform == PlatformChoice.Youtube:
-            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, custom_live_message=custom_live_message, mode=1)
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+            custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=1)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_two", description="Dynamic live notification + Persistent text channel reporting channel live status")
     async def streamers_add_mode_2(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None):
+                                   notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
-            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+            return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+                status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
         elif platform == PlatformChoice.Youtube:
-            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, 
+                status_channel=status_channel, custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=2)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     async def addstreamer_twitch(self, ctx: ApplicationCustomContext, streamer_username: str,
@@ -589,11 +600,11 @@ class CommandsCog(commands.Cog):
 
     async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
                                   notification_channel: TextChannel, mode: int, alert_role: Role = None,
-                                  status_channel: TextChannel = None, custom_live_message: str = None):
+                                  status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False):
 
         # Find account first
         # Assume display name first, saves an api request
-        channel = await self.bot.yapi.get_user(display_name=channel_id_or_display_name) or await self.bot.yapi.get_user(user_id=channel_id_or_display_name)
+        channel = await self.bot.yapi.get_user(display_name=channel_id_or_display_name) or await self.bot.yapi.get_user(user_id=channel_id_or_display_name) or await self.bot.yapi.get_user(user_name=channel_id_or_display_name)
         if channel is None:
             return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel")
 
@@ -659,6 +670,9 @@ class CommandsCog(commands.Cog):
         if custom_live_message:
             callback["alert_roles"][str(
                 ctx.guild.id)]["custom_message"] = custom_live_message
+        if allow_youtube_premieres:
+            callback["alert_roles"][str(
+                ctx.guild.id)]["enable_premieres"] = allow_youtube_premieres
 
         await self.bot.db.write_yt_callback(channel, callback)
 
@@ -702,6 +716,7 @@ class CommandsCog(commands.Cog):
 
     @staticmethod
     def page_generator(ctx: ApplicationCustomContext, data: dict, sort_by: str, reverse: bool) -> list[str]:
+        #max_length = max([len(a['display_name']) for a in data.values()])
         pages: list[str] = []
         page = [
             f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
@@ -711,6 +726,11 @@ class CommandsCog(commands.Cog):
             if type(items[1][sort_by]) == str:
                 return items[1][sort_by].lower()
             return items[1][sort_by]
+
+        def truncate(name: str, amount: int) -> str:
+            if len(name) >= amount:
+                return f"{name[:amount-3]}..."
+            return name
         for streamer_id, alert_info in dict(sorted(data.items(), key=sorter, reverse=reverse)).items():
             if str(ctx.guild.id) in alert_info["alert_roles"].keys():
                 info = alert_info["alert_roles"][str(ctx.guild.id)]
@@ -740,8 +760,13 @@ class CommandsCog(commands.Cog):
                     last_live = datetime.utcfromtimestamp(
                         last_live).strftime("%d-%m-%y %H:%M")
 
+                if info.get("enable_premieres", False):
+                    premieres = " + Premieres"
+                else:
+                    premieres = ""
+
                 page.append(
-                    f"{alert_info['display_name']:15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}")
+                    f"{truncate(alert_info['display_name'], 15):15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}{premieres}")
                 if len(page) == 14:
                     if pages == []:
                         pages.append(

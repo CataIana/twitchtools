@@ -2,7 +2,8 @@ from typing import Optional, Union
 
 from dateutil import parser
 
-from .enums import AlertOrigin, Languages, VideoPrivacy, VideoType
+from .enums import (AlertOrigin, Languages, VideoPrivacy, VideoType,
+                    YoutubeVideoType)
 from .user import PartialUser, PartialYoutubeUser, YoutubeUser
 
 
@@ -50,7 +51,7 @@ class Video:
 
 
 class YoutubeVideo:
-    def __init__(self, id: str, snippet: dict, content: dict, stream: dict, alert_origin: AlertOrigin, **kwargs):
+    def __init__(self, id: str, snippet: dict, content: dict, status: dict, stream: dict, video_type: YoutubeVideoType, alert_origin: AlertOrigin, **kwargs):
         self.id: str = id
         self.video_id: str = self.id
         self.channel = PartialYoutubeUser(
@@ -71,6 +72,11 @@ class YoutubeVideo:
         self.created_at = self.started_at
         self.view_count: Optional[int] = int(stream.get("concurrentViewers", 0)) or None
         self.origin: AlertOrigin = alert_origin
+        self.upload_status: str = status["uploadStatus"]
+        self.privacy_status: str = status["privacyStatus"]
+        self.made_for_kids: bool = status["madeForKids"]
+        self.embeddable: bool = status["embeddable"]
+        self.type: YoutubeVideoType = video_type
 
     def __repr__(self) -> str:
         return f'<{type(self).__name__} id={self.id} user={self.user.display_name!r}>'
