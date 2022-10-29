@@ -519,7 +519,7 @@ class StreamStateManager(commands.Cog):
                 f"Notification cooldown active for {video.user.display_name}, restoring old channels/messages")
 
         self.bot.log.info(
-            f"{video.user.display_name} => ONLINE (Youtube)")
+            f"{video.user.display_name} => ONLINE (Youtube{' (PREMIERE)' if video.type == YoutubeVideoType.premiere else ''})")
 
         # Update cached display name
         if callback.display_name != video.user.display_name:
