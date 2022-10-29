@@ -8,7 +8,9 @@ from disnake.ext import commands
 from munch import munchify
 from pymongo.errors import ServerSelectionTimeoutError
 
-from twitchtools.enums import ChannelCache, TitleCache, YoutubeChannelCache
+from twitchtools.enums import (Callback, ChannelCache, TitleCache,
+                               TitleCallback, YoutubeCallback,
+                               YoutubeChannelCache)
 from twitchtools.exceptions import DBConnectionError
 from twitchtools.user import PartialUser, PartialYoutubeUser, User
 from twitchtools.video import YoutubeVideo
@@ -76,84 +78,86 @@ class DB(commands.Cog, name="Database Cog"):
             return token.get("token", None)
         return None
 
-    async def get_callback(self, broadcaster: PartialUser) -> Optional[dict]:
+    async def get_callback(self, broadcaster: PartialUser) -> Optional[Callback]:
         await self.check_connect()
         callback = await self._db.callbacks.find_one({"_id": str(broadcaster.id)})
         if callback:
-            return callback
+            return munchify(callback)
         return None
 
-    async def get_callback_by_id(self, broadcaster_id: int) -> Optional[dict]:
+    async def get_callback_by_id(self, broadcaster_id: int) -> Optional[Callback]:
         await self.check_connect()
         callback = await self._db.callbacks.find_one({"_id": str(broadcaster_id)})
         if callback:
-            return callback
+            return munchify(callback)
         return None
 
-    async def write_callback(self, broadcaster: PartialUser, callback: dict):
+    async def write_callback(self, broadcaster: PartialUser, callback: Callback):
         await self.check_connect()
+        callback = dict(callback)
         result = await self._db.callbacks.update_one({"_id": str(broadcaster.id)}, {"$set": callback})
         if result.matched_count == 0:
             callback.update({"_id": str(broadcaster.id)})
             await self._db.callbacks.insert_one(callback)
 
-    async def async_get_all_callbacks(self) -> Generator[tuple[User, dict], None, None]:
+    async def async_get_all_callbacks(self) -> Generator[tuple[User, Callback], None, None]:
         await self.check_connect()
         async for document in self._db.callbacks.find({"_id": {"$exists": True}}):
             broadcaster = await self.bot.tapi.get_user(user_id=document["_id"])
-            yield broadcaster, document
+            yield broadcaster, munchify(document)
 
-    async def get_all_callbacks(self) -> dict[str, dict]:
+    async def get_all_callbacks(self) -> dict[str, Callback]:
         await self.check_connect()
         cursor = self._db.callbacks.find({"_id": {"$exists": True}})
         count = await self._db.callbacks.count_documents({})
         documents = await cursor.to_list(length=count)
-        return {d["_id"]: d for d in documents}
+        return {d["_id"]: munchify(d) for d in documents}
 
     async def delete_callback(self, broadcaster: PartialUser):
         await self.check_connect()
         return await self._db.callbacks.find_one_and_delete({"_id": str(broadcaster.id)})
 
-    async def get_title_callback(self, broadcaster: PartialUser) -> Optional[dict]:
+    async def get_title_callback(self, broadcaster: PartialUser) -> Optional[TitleCallback]:
         await self.check_connect()
         callback = await self._db.tcallbacks.find_one({"_id": str(broadcaster.id)})
         if callback:
-            return callback
+            return munchify(callback)
         return None
 
-    async def get_title_callback_by_id(self, broadcaster_id: int) -> Optional[dict]:
+    async def get_title_callback_by_id(self, broadcaster_id: int) -> Optional[TitleCallback]:
         await self.check_connect()
         callback = await self._db.tcallbacks.find_one({"_id": str(broadcaster_id)})
         if callback:
-            return callback
+            return munchify(callback)
         return None
 
-    async def write_title_callback(self, broadcaster: PartialUser, callback: dict):
+    async def write_title_callback(self, broadcaster: PartialUser, callback: TitleCallback):
         await self.check_connect()
+        callback = dict(callback)
         #result = await self._db.tcallbacks.update_one({"_id": str(broadcaster.id)}, {"$set": callback})
         result = await self._db.tcallbacks.replace_one({"_id": str(broadcaster.id)}, callback)
         if result.matched_count == 0:
             callback.update({"_id": str(broadcaster.id)})
             await self._db.tcallbacks.insert_one(callback)
 
-    async def async_get_all_title_callbacks(self) -> Generator[tuple[User, dict], None, None]:
+    async def async_get_all_title_callbacks(self) -> Generator[tuple[User, TitleCallback], None, None]:
         await self.check_connect()
         async for document in self._db.tcallbacks.find({"_id": {"$exists": True}}):
             broadcaster = await self.bot.tapi.get_user(user_id=document["_id"])
-            yield broadcaster, document
+            yield broadcaster, munchify(document)
 
-    async def get_all_title_callbacks(self) -> dict[str, dict]:
+    async def get_all_title_callbacks(self) -> dict[str, TitleCallback]:
         await self.check_connect()
         cursor = self._db.tcallbacks.find({"_id": {"$exists": True}})
         count = await self._db.tcallbacks.count_documents({})
         documents = await cursor.to_list(length=count)
-        return {d["_id"]: d for d in documents}
+        return {d["_id"]: munchify(d) for d in documents}
 
     async def delete_title_callback(self, broadcaster: PartialUser):
         await self.check_connect()
         return await self._db.tcallbacks.find_one_and_delete({"_id": str(broadcaster.id)})
 
-    async def get_channel_cache(self, broadcaster: PartialUser) -> ChannelCache:
+    async def get_channel_cache(self, broadcaster: PartialUser) -> Optional[ChannelCache]:
         await self.check_connect()
         channel_cache = await self._db.ccache.find_one({"_id": str(broadcaster.id)})
         if channel_cache:
@@ -219,22 +223,23 @@ class DB(commands.Cog, name="Database Cog"):
         await self.check_connect()
         return await self._db.mrole.find_one_and_delete({"_id": str(guild.id)})
 
-    async def get_yt_callback(self, channel: PartialYoutubeUser) -> Optional[dict]:
+    async def get_yt_callback(self, channel: PartialYoutubeUser) -> Optional[YoutubeCallback]:
         await self.check_connect()
         yt_callback = await self._db.yt_callbacks.find_one({"_id": channel.id})
         if yt_callback:
-            return yt_callback
+            return munchify(yt_callback)
         return None
 
-    async def get_yt_callback_by_id(self, channel_id: str) -> Optional[dict]:
+    async def get_yt_callback_by_id(self, channel_id: str) -> Optional[YoutubeCallback]:
         await self.check_connect()
         yt_callback = await self._db.yt_callbacks.find_one({"_id": channel_id})
         if yt_callback:
-            return yt_callback
+            return munchify(yt_callback)
         return None
 
-    async def write_yt_callback(self, channel: PartialYoutubeUser, callback: dict):
+    async def write_yt_callback(self, channel: PartialYoutubeUser, callback: YoutubeCallback):
         await self.check_connect()
+        callback = dict(callback)
         result = await self._db.yt_callbacks.update_one({"_id": channel.id}, {"$set": callback})
         if result.matched_count == 0:
             callback.update({"_id": channel.id})
@@ -244,15 +249,15 @@ class DB(commands.Cog, name="Database Cog"):
         await self.check_connect()
         callback = await self.get_yt_callback(channel)
         if callback:
-            callback["expiry_time"] = int(timestamp)
-            await self.write_yt_callback(channel, callback)
+            callback.expiry_time = int(timestamp)
+            await self.write_yt_callback(channel, dict(callback))
 
-    async def get_all_yt_callbacks(self) -> dict[PartialYoutubeUser, dict]:
+    async def get_all_yt_callbacks(self) -> dict[PartialYoutubeUser, YoutubeCallback]:
         await self.check_connect()
         cursor = self._db.yt_callbacks.find({"_id": {"$exists": True}})
         count = await self._db.yt_callbacks.count_documents({})
         documents = await cursor.to_list(length=count)
-        return {PartialYoutubeUser(d["_id"], d["display_name"]): d for d in documents}
+        return {PartialYoutubeUser(d["_id"], d["display_name"]): munchify(d) for d in documents}
 
     async def delete_yt_callback(self, channel: PartialYoutubeUser):
         await self.check_connect()
@@ -271,7 +276,7 @@ class DB(commands.Cog, name="Database Cog"):
         if result.matched_count == 0:
             await self._db.yt_cache.insert_one({"_id": video.channel.id, "video_id": video.id, "publish_time": video.published_at.timestamp()})
 
-    async def get_yt_channel_cache(self, channel: PartialYoutubeUser) -> YoutubeChannelCache:
+    async def get_yt_channel_cache(self, channel: PartialYoutubeUser) -> Optional[YoutubeChannelCache]:
         await self.check_connect()
         channel_cache = await self._db.yt_ccache.find_one({"_id": channel.id})
         if channel_cache:

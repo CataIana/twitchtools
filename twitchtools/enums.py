@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional, Union
 
 
 class AlertOrigin(Enum):
@@ -287,6 +288,54 @@ class TitleCache(Enum):
     game: str
 
 
+class CallbackAlertInfo(Enum):
+    mode: int
+    role_id: Union[int, str, None]
+    channel_id: Optional[int]
+    notif_channel_id: int
+    custom_message: Optional[str]
+
+
+class Callback(Enum):
+    display_name: str
+    secret: str
+    alert_roles: dict[str, CallbackAlertInfo]
+    online_id: str
+    offline_id: str
+    title_id: str
+
+
+class YoutubeCallbackAlertInfo(Enum):
+    mode: int
+    role_id: Union[int, str, None]
+    channel_id: Optional[int]
+    notif_channel_id: int
+    custom_message: Optional[str]
+    enable_premieres: str
+
+
+class YoutubeCallback(Enum):
+    _id: str
+    display_name: str
+    secret: str
+    alert_roles: dict[str, YoutubeCallbackAlertInfo]
+    uploads_playlist_id: str
+    subscription_id: str
+    expiry_time: int
+
+
+class TitleCallbackAlertInfo(Enum):
+    role_id: int
+    notif_channel_id: int
+
+
+class TitleCallback(Enum):
+    display_name: str
+    alert_roles: dict[str, TitleCallbackAlertInfo]
+    subscription_id: Optional[str]
+    secret: Optional[str]
+
+
 class ChannelCache(Enum):
     alert_cooldown: int
     user_login: str
@@ -318,6 +367,7 @@ class Emotes(Enum):
     def __str__(self):
         # return "%s.%s" % (self.__class__.__name__, self._name_)
         return self._value_
+
 
 class YoutubeVideoType(Enum):
     video = "video"

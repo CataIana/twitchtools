@@ -103,15 +103,15 @@ class StreamStateManager(commands.Cog):
         self.bot.log.info(f"{event.broadcaster.username} => TITLE UPDATE")
 
         # Send embed to each defined channel
-        for data in title_callback["alert_roles"].values():
-            c = self.bot.get_channel(data["notif_channel_id"])
+        for alert_info in title_callback.alert_roles.values():
+            c = self.bot.get_channel(alert_info.notif_channel_id)
             if c is not None:
-                if data['role_id'] is None:
+                if alert_info.role_id is None:
                     role_mention = ""
-                elif data["role_id"] == "everyone":
+                elif alert_info.role_id == "everyone":
                     role_mention = "@everyone"
                 else:
-                    role_mention = f"<@&{data['role_id']}>"
+                    role_mention = f"<@&{alert_info.role_id}>"
                 try:
                     await c.send(f"{role_mention}", embed=embed)
                 except disnake.Forbidden:
@@ -249,9 +249,9 @@ class StreamStateManager(commands.Cog):
             c = self.bot.get_channel(channel_id)
             if c is not None:
                 try:
-                    if callback["alert_roles"][str(c.guild.id)]["mode"] == 0:
+                    if callback.alert_roles[str(c.guild.id)].mode == 0:
                         await c.delete()
-                    elif callback["alert_roles"][str(c.guild.id)]["mode"] == 2:
+                    elif callback.alert_roles[str(c.guild.id)].mode == 2:
                         await c.edit(name="stream-offline")
                 except disnake.Forbidden:
                     continue
@@ -335,8 +335,8 @@ class StreamStateManager(commands.Cog):
         self.bot.log.info(f"{stream.user.username} => ONLINE (Twitch)")
 
         # Update cached display name
-        if callback["display_name"] != stream.user.display_name:
-            callback["display_name"] = stream.user.display_name
+        if callback.display_name != stream.user.display_name:
+            callback.display_name = stream.user.display_name
             await self.bot.db.write_callback(stream.user, callback)
 
         # Create embed message
@@ -364,18 +364,18 @@ class StreamStateManager(commands.Cog):
         live_channels = []
         live_alerts = []
         reuse_done = False
-        for guild_id, alert_info in callback["alert_roles"].items():
+        for guild_id, alert_info in callback.alert_roles.items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
                 continue
 
             # Format role mention
-            if alert_info["role_id"] == "everyone":
+            if alert_info.role_id == "everyone":
                 role_mention = f" {guild.default_role}"
-            elif alert_info["role_id"] == None:
+            elif alert_info.role_id == None:
                 role_mention = ""
             else:
-                role = guild.get_role(alert_info["role_id"])
+                role = guild.get_role(alert_info.role_id)
                 role_mention = f" {role.mention}"
 
             if not on_cooldown:  # Send live alert if not on alert cooldown, and append channel id and message id to channel cache
@@ -417,46 +417,47 @@ class StreamStateManager(commands.Cog):
                 # Since reuse is all done in the first iteration, don't waste time doing it again
                 reuse_done = True
 
-            if alert_info["mode"] == 0:  # Temporary live channel mode
+            match alert_info.mode:
+                case 0: # Temporary live channel mode
 
-                # Create channel overrides
-                NewChannelOverrides = {self.bot.user: SelfOverride}
-                if alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[guild.default_role] = DefaultRole
-                if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[role] = OverrideRole
+                    # Create channel overrides
+                    NewChannelOverrides = {self.bot.user: SelfOverride}
+                    if alert_info.role_id != "everyone":
+                        NewChannelOverrides[guild.default_role] = DefaultRole
+                    if alert_info.role_id is not None and alert_info.role_id != "everyone":
+                        NewChannelOverrides[role] = OverrideRole
 
-                # Check if channel doesn't already exist. Kind of a bad idea, but does effectively prevent duplicate channels
-                # if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
-                    # Create temporary channel and add channel id to channel cache
-                try:
-                    channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
-                    if channel:
-                        user_escaped = stream.user.display_name.replace(
-                            '_', '\_')
-                        await channel.send(f"{user_escaped} is live! https://twitch.tv/{stream.user.name}")
-                        live_channels.append(channel.id)
-                except disnake.Forbidden:
-                    self.bot.log.warning(
-                        f"Error creating text channels for {stream.user.username} in guild {guild.name}")
-
-            # Notification is already sent, nothing needed to be done
-            elif alert_info["mode"] == 1:
-                pass
-
-            # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
-            elif alert_info["mode"] == 2:
-                channel = self.bot.get_channel(alert_info["channel_id"])
-                if channel is not None:
+                    # Check if channel doesn't already exist. Kind of a bad idea, but does effectively prevent duplicate channels
+                    # if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
+                        # Create temporary channel and add channel id to channel cache
                     try:
-                        await channel.edit(name="🔴now-live")
-                        live_channels.append(channel.id)
+                        channel = await guild.create_text_channel(f"🔴{stream.user.username}", overwrites=NewChannelOverrides, position=0)
+                        if channel:
+                            user_escaped = stream.user.display_name.replace(
+                                '_', '\_')
+                            await channel.send(f"{user_escaped} is live! https://twitch.tv/{stream.user.name}")
+                            live_channels.append(channel.id)
                     except disnake.Forbidden:
                         self.bot.log.warning(
-                            f"Error updating channels for {stream.user.username} in guild {channel.guild.name}")
-                else:
-                    self.bot.log.warning(
-                        f"Persistent channel not found for {stream.user.username}")
+                            f"Error creating text channels for {stream.user.username} in guild {guild.name}")
+
+                # Notification is already sent, nothing needed to be done
+                case 1:
+                    pass
+
+                # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
+                case 2:
+                    channel = self.bot.get_channel(alert_info["channel_id"])
+                    if channel is not None:
+                        try:
+                            await channel.edit(name="🔴now-live")
+                            live_channels.append(channel.id)
+                        except disnake.Forbidden:
+                            self.bot.log.warning(
+                                f"Error updating channels for {stream.user.username} in guild {channel.guild.name}")
+                    else:
+                        self.bot.log.warning(
+                            f"Persistent channel not found for {stream.user.username}")
 
         # Finally, combine all data into channel cache, and update the file
         channel_cache = {
@@ -521,8 +522,8 @@ class StreamStateManager(commands.Cog):
             f"{video.user.display_name} => ONLINE (Youtube)")
 
         # Update cached display name
-        if callback["display_name"] != video.user.display_name:
-            callback["display_name"] = video.user.display_name
+        if callback.display_name != video.user.display_name:
+            callback.display_name = video.user.display_name
             await self.bot.db.write_yt_callback(video.user, callback)
 
         # Create embed message
@@ -550,21 +551,21 @@ class StreamStateManager(commands.Cog):
         live_channels = []
         live_alerts = []
         reuse_done = False
-        for guild_id, alert_info in callback["alert_roles"].items():
+        for guild_id, alert_info in callback.alert_roles.items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
                 continue
 
-            if video.type == YoutubeVideoType.premiere and not alert_info["enable_premieres"]:
+            if video.type == YoutubeVideoType.premiere and not alert_info.enable_premieres:
                 continue
 
             # Format role mention
-            if alert_info["role_id"] == "everyone":
+            if alert_info.role_id == "everyone":
                 role_mention = f" {guild.default_role}"
-            elif alert_info["role_id"] == None:
+            elif alert_info.role_id == None:
                 role_mention = ""
             else:
-                role = guild.get_role(alert_info["role_id"])
+                role = guild.get_role(alert_info.role_id)
                 role_mention = f" {role.mention}"
 
             if not on_cooldown:  # Send live alert if not on alert cooldown, and append channel id and message id to channel cache
@@ -606,46 +607,47 @@ class StreamStateManager(commands.Cog):
                 # Since reuse is all done in the first iteration, don't waste time doing it again
                 reuse_done = True
 
-            if alert_info["mode"] == 0:  # Temporary live channel mode
+            match alert_info.mode:
+                case 0: # Temporary live channel mode
 
-                # Create channel overrides
-                NewChannelOverrides = {self.bot.user: SelfOverride}
-                if alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[guild.default_role] = DefaultRole
-                if alert_info["role_id"] is not None and alert_info["role_id"] != "everyone":
-                    NewChannelOverrides[role] = OverrideRole
+                    # Create channel overrides
+                    NewChannelOverrides = {self.bot.user: SelfOverride}
+                    if alert_info.role_id != "everyone":
+                        NewChannelOverrides[guild.default_role] = DefaultRole
+                    if alert_info.role_id is not None and alert_info.role_id != "everyone":
+                        NewChannelOverrides[role] = OverrideRole
 
-                # Check if channel doesn't already exist. Kind of a bad idea, but does effectively prevent duplicate channels
-                # if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
-                    # Create temporary channel and add channel id to channel cache
-                try:
-                    channel = await guild.create_text_channel(f"🔴{video.user.display_name.lower()}", overwrites=NewChannelOverrides, position=0)
-                    if channel:
-                        user_escaped = video.user.display_name.replace(
-                            '_', '\_')
-                        await channel.send(f"{user_escaped} is live! https://youtube.com/watch?v={video.id}")
-                        live_channels.append(channel.id)
-                except disnake.Forbidden:
-                    self.bot.log.warning(
-                        f"Error creating text channels for {video.user.display_name} in guild {guild.name}")
-
-            # Notification is already sent, nothing needed to be done
-            elif alert_info["mode"] == 1:
-                pass
-
-            # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
-            elif alert_info["mode"] == 2:
-                channel = self.bot.get_channel(alert_info["channel_id"])
-                if channel is not None:
+                    # Check if channel doesn't already exist. Kind of a bad idea, but does effectively prevent duplicate channels
+                    # if f"🔴{stream.user.username}" not in [channel.name for channel in guild.text_channels]:
+                        # Create temporary channel and add channel id to channel cache
                     try:
-                        await channel.edit(name="🔴now-live")
-                        live_channels.append(channel.id)
+                        channel = await guild.create_text_channel(f"🔴{video.user.display_name.lower()}", overwrites=NewChannelOverrides, position=0)
+                        if channel:
+                            user_escaped = video.user.display_name.replace(
+                                '_', '\_')
+                            await channel.send(f"{user_escaped} is live! https://youtube.com/watch?v={video.id}")
+                            live_channels.append(channel.id)
                     except disnake.Forbidden:
                         self.bot.log.warning(
-                            f"Error updating persistent channel {video.user.display_name} in guild {channel.guild.name}")
-                else:
-                    self.bot.log.warning(
-                        f"Persistent channel not found for {video.user.display_name}")
+                            f"Error creating text channels for {video.user.display_name} in guild {guild.name}")
+
+                # Notification is already sent, nothing needed to be done
+                case 1:
+                    pass
+
+                # Permanent channel. Do the same as above, but modify the existing channel, instead of making a new one
+                case 2:
+                    channel = self.bot.get_channel(alert_info.channel_id)
+                    if channel is not None:
+                        try:
+                            await channel.edit(name="🔴now-live")
+                            live_channels.append(channel.id)
+                        except disnake.Forbidden:
+                            self.bot.log.warning(
+                                f"Error updating persistent channel {video.user.display_name} in guild {channel.guild.name}")
+                    else:
+                        self.bot.log.warning(
+                            f"Persistent channel not found for {video.user.display_name}")
 
         # Finally, combine all data into channel cache, and update the file
         channel_cache = {

@@ -179,11 +179,11 @@ class CommandsCog(commands.Cog):
         callbacks = await self.bot.db.get_all_callbacks()
         alert_count = 0
         for data in callbacks.values():
-            alert_count += len(data["alert_roles"].values())
+            alert_count += len(data.alert_roles.values())
         yt_callbacks = await self.bot.db.get_all_yt_callbacks()
         yt_alert_count = 0
         for data in yt_callbacks.values():
-            yt_alert_count += len(data["alert_roles"].values())
+            yt_alert_count += len(data.alert_roles.values())
         botinfo = f"**🏠 Servers:** {len(self.bot.guilds)}\n**🤖 Bot Creation Date:** {DiscordTimezone(int(self.bot.user.created_at.timestamp()), TimestampOptions.long_date_short_time)}\n**🕑 Uptime:** {human_timedelta(datetime.utcfromtimestamp(self.bot._uptime), suffix=False)}\n**🏓 Latency:**  {int(self.bot.latency*1000)}ms\n**🕵️‍♀️ Owner{'s' if is_plural else ''}:** {owners}\n**<:Twitch:891703045908467763> Subscribed Twitch Streamers:** {len(callbacks.keys())}\n**<:Youtube:1034338274220703756> Subscribed YT Channels:** {len(yt_callbacks.keys())}\n**<:notaggy:891702828756766730> Twitch Notification Count:** {alert_count}\n**<:notaggy:891702828756766730> Youtube Notification Count:** {yt_alert_count}"
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
         systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Disnake Version:** {disnake.__version__}\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB"
@@ -685,6 +685,8 @@ class CommandsCog(commands.Cog):
             except SubscriptionError as e:
                 await self.youtube_callback_deletion(ctx, channel)
                 raise SubscriptionError(str(e))
+            timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
+            await self.bot.db.write_yt_callback_expiration(channel, timestamp)
 
         await self.bot.db.write_yt_callback(channel, callback)
 
@@ -833,7 +835,7 @@ class CommandsCog(commands.Cog):
             if channel:
                 if channel.guild == ctx.guild:
                     try:
-                        if callback["alert_roles"][str(channel.guild.id)]["mode"] == 0:
+                        if callback.alert_roles[str(channel.guild.id)].mode == 0:
                             await channel.delete()
                         # elif callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         #     await channel.edit(name="stream-offline")
@@ -1014,30 +1016,32 @@ class CommandsCog(commands.Cog):
         elif alert_type.name == "title":
             callback = await self.bot.db.get_title_callback(streamer)
         try:
-            del callback["alert_roles"][str(ctx.guild.id)]
+            del callback.alert_roles[str(ctx.guild.id)]
         except KeyError:
             raise commands.BadArgument("Streamer not found for server")
-        if callback["alert_roles"] == {}:
+        if callback.alert_roles == {}:
             self.bot.log.info(
                 f"Twitch streamer {streamer.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
             await self.bot.wait_until_db_ready()
             if alert_type == AlertType.status:
                 try:
-                    await self.bot.tapi.delete_subscription(callback["offline_id"])
-                    await self.bot.tapi.delete_subscription(callback["online_id"])
+                    await self.bot.tapi.delete_subscription(callback.offline_id)
+                    await self.bot.tapi.delete_subscription(callback.online_id)
                     # Hand off subscription to title callback if it is defined for the streamer
                     if title_callback := await self.bot.db.get_title_callback(streamer):
-                        title_callback["subscription_id"] = callback["title_id"]
-                        title_callback["secret"] = callback["secret"]
+                        title_callback.subscription_id = callback.title_id
+                        title_callback.secret = callback.secret
                         await self.bot.db.write_title_callback(streamer, title_callback)
                     else:
-                        await self.bot.tapi.delete_subscription(callback["title_id"])
+                        await self.bot.tapi.delete_subscription(callback.title_id)
                 except KeyError:
+                    pass
+                except AttributeError:
                     pass
                 await self.bot.db.delete_channel_cache(streamer)
             else:
                 if callback.get("subscription_id", None):
-                    await self.bot.tapi.delete_subscription(callback["subscription_id"])
+                    await self.bot.tapi.delete_subscription(callback.subscription_id)
                 await self.bot.db.delete_title_cache(streamer)
             if alert_type.name == "status":
                 await self.bot.db.delete_callback(streamer)
@@ -1052,15 +1056,15 @@ class CommandsCog(commands.Cog):
     async def youtube_callback_deletion(self, ctx: ApplicationCustomContext, channel: YoutubeUser):
         callback = await self.bot.db.get_yt_callback(channel)
         try:
-            del callback["alert_roles"][str(ctx.guild.id)]
+            del callback.alert_roles[str(ctx.guild.id)]
         except KeyError:
             raise commands.BadArgument("Streamer not found for server")
-        if callback["alert_roles"] == {}:
+        if callback.alert_roles == {}:
             self.bot.log.info(
                 f"Youtube channel {channel.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
             await self.bot.wait_until_db_ready()
             try:
-                await self.bot.yapi.delete_subscription(YoutubeSubscription(callback["subscription_id"], channel, callback["secret"]))
+                await self.bot.yapi.delete_subscription(YoutubeSubscription(callback.subscription_id, channel, callback.secret))
             except KeyError:
                 pass
             await self.bot.db.delete_yt_channel_cache(channel)

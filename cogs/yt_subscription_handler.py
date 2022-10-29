@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from disnake.ext import commands, tasks
 
-from twitchtools.user import PartialYoutubeUser
+from twitchtools import PartialYoutubeUser, YoutubeCallback
 
 if TYPE_CHECKING:
     from twitchtools import TwitchCallBackBot
@@ -32,12 +32,12 @@ class YTSubscriptionHandler(commands.Cog, name="Youtube Subscription Handler"):
                     f"Resubscribing YT channel {channel.display_name}")
                 await self.yt_subscribe(channel, channel_data)
 
-    async def yt_subscribe(self, channel: PartialYoutubeUser, channel_data: dict):
-        await self.bot.yapi.create_subscription(channel, channel_data["secret"], channel_data["subscription_id"])
+    async def yt_subscribe(self, channel: PartialYoutubeUser, channel_data: YoutubeCallback):
+        await self.bot.yapi.create_subscription(channel, channel_data.secret, channel_data.subscription_id)
         # Minus a day plus 100 seconds, ensures that the subscription never expires
         timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
         await self.bot.db.write_yt_callback_expiration(channel, timestamp)
-        self.bot.log.info(f"Resubscribed {channel.display_name}")
+        # self.bot.log.info(f"Resubscribed {channel.display_name}")
         await sleep(0.25)
 
 

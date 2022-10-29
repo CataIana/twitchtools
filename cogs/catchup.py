@@ -59,13 +59,13 @@ class Catchup(commands.Cog):
                 stream = [s for s in streams if s.user.id ==
                           int(streamer_id)][0]
                 # Update display name if needed
-                if callback_info["display_name"] != stream.user.display_name:
-                    callback_info["display_name"] = stream.user.display_name
+                if callback_info.display_name != stream.user.display_name:
+                    callback_info.display_name = stream.user.display_name
                     await self.bot.db.write_callback(stream.user, callback_info)
                 self.bot.queue.put_nowait(stream)
             else:
                 self.bot.queue.put_nowait(PartialUser(
-                    streamer_id, callback_info["display_name"].lower(), callback_info["display_name"]))
+                    streamer_id, callback_info.display_name.lower(), callback_info.display_name))
 
     async def youtube_catchup(self):
         await self.bot.wait_until_ready()
@@ -123,8 +123,8 @@ class Catchup(commands.Cog):
                     except VideoNotFound:
                         continue
                     # Update display name if needed
-                    if callback_info["display_name"] != video.user.display_name:
-                        callback_info["display_name"] = video.user.display_name
+                    if callback_info.display_name != video.user.display_name:
+                        callback_info.display_name = video.user.display_name
                         await self.bot.db.write_yt_callback(video.user, callback_info)
                     self.bot.queue.put_nowait(video)
                 else:

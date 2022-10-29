@@ -72,6 +72,8 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.load_extension("cogs.guild_remove_cleanup")
         # Handles catching up state when events may not occur or are missed
         self.load_extension("cogs.catchup")
+        # Resubscribes expired channel subscriptions
+        self.load_extension("cogs.yt_subscription_handler")
         # Just garbage, maybe I will fix this one day
         self.load_extension("cogs.emotes_sync")
 
