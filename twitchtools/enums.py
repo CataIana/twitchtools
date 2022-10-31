@@ -372,4 +372,4 @@ class Emotes(Enum):
 class YoutubeVideoType(Enum):
     video = "video"
     premiere = "premiere"
-    livestream = "livestream"
+    stream = "stream"

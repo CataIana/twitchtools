@@ -226,26 +226,26 @@ class http_youtube:
                 f"{display_name} updated latest video {id}")
             try:
                 return await self.get_stream(id)
-            except VideoNotFound:
+            except VideoNotFound as e:
                 self.bot.log.info(f"{display_name}: {str(e)}")
                 return
             except VideoNotStream as e:
                 self.bot.log.info(f"{display_name}: {str(e)}")
                 return
-            except VideoStreamEnded:
+            except VideoStreamEnded as e:
                 self.bot.log.info(f"{display_name}: {str(e)}")
                 return
 
         # Check video exists
         try:
             video = await self.get_stream(id)
-        except VideoNotFound:
+        except VideoNotFound as e:
             self.bot.log.info(f"{display_name}: {str(e)}")
             return
         except VideoNotStream as e:
             self.bot.log.info(f"{display_name}: {str(e)}")
             return
-        except VideoStreamEnded:
+        except VideoStreamEnded as e:
             self.bot.log.info(f"{display_name}: {str(e)}")
             return
 
