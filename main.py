@@ -85,6 +85,10 @@ class TwitchCallBackBot(commands.InteractionBot):
         self._uptime = time()
         self.application_invoke = self.process_application_commands
         self.ratelimits: dict[str, Ratelimit] = {}
+        self.viewer_milestones_interval: int = 50000
+        self.viewer_milestones_minimum: int = 100000
+        # self.viewer_milestones_interval: int = 100
+        # self.viewer_milestones_minimum: int = 100
 
     async def ratelimit_request(self, streamer: Union[PartialYoutubeUser, PartialUser]):
         if self.ratelimits.get(streamer.id, None) is None:

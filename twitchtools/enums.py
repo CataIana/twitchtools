@@ -294,6 +294,7 @@ class CallbackAlertInfo(Enum):
     channel_id: Optional[int]
     notif_channel_id: int
     custom_message: Optional[str]
+    title_match_phrase: Optional[str]
 
 
 class Callback(Enum):
@@ -312,6 +313,7 @@ class YoutubeCallbackAlertInfo(Enum):
     notif_channel_id: int
     custom_message: Optional[str]
     enable_premieres: str
+    title_match_phrase: Optional[str]
 
 
 class YoutubeCallback(Enum):
@@ -346,6 +348,8 @@ class ChannelCache(Enum):
     last_update: int
     games: dict[str, int]
     reusable_alerts: list[dict[str, int]]
+    viewer_milestone: Optional[int]
+    triggered_guilds: list[str]
 
 
 class YoutubeChannelCache(Enum):
@@ -357,6 +361,7 @@ class YoutubeChannelCache(Enum):
     live_alerts: dict[str, int]
     last_update: int
     reusable_alerts: list[dict[str, int]]
+    triggered_guilds: list[str]
 
 
 class Emotes(Enum):
