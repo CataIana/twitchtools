@@ -29,9 +29,10 @@ class TwitchCallBackBot(commands.InteractionBot):
     def __init__(self):
         intents = disnake.Intents.none()
         intents.guilds = True
-        super().__init__(intents=intents, activity=disnake.Activity(
+        sync_flags = commands.CommandSyncFlags.default()
+        sync_flags.sync_commands_debug = True
+        super().__init__(intents=intents, command_sync_flags=sync_flags, activity=disnake.Activity(
             type=disnake.ActivityType.listening, name="stream status"))
-        self._sync_commands_debug = True
         self.queue = Queue(maxsize=0)
 
         self.log: logging.Logger = logging.getLogger("TwitchTools")
