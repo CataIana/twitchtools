@@ -30,7 +30,7 @@ async def _sync_application_commands(self) -> None:
     if not isinstance(self, Client):
         raise NotImplementedError(f"This method is only usable in disnake.Client subclasses")
 
-    if not self._sync_commands or self._is_closed or self.loop.is_closed():
+    if not self._command_sync_flags._sync_enabled or self._is_closed or self.loop.is_closed():
         return
 
     # We assume that all commands are already cached.
@@ -45,7 +45,7 @@ async def _sync_application_commands(self) -> None:
     )
     update_required = bool(diff["upsert"]) or bool(diff["edit"]) or bool(diff["delete"])
 
-    if self._sync_commands_debug:
+    if self._command_sync_flags._sync_enabled:
         if update_required:
             self.log.info("Updating application commands")
             _show_diff(self, diff)
@@ -65,7 +65,7 @@ async def _sync_application_commands(self) -> None:
         diff = _app_commands_diff(cmds, current_guild_cmds.values())
         update_required = bool(diff["upsert"]) or bool(diff["edit"]) or bool(diff["delete"])
         # Show diff
-        if self._sync_commands_debug:
+        if self._command_sync_flags._sync_enabled:
             if update_required:
                 self.log.info(f"Updating application commands in {self.get_guild(int(guild_id))}")
                 _show_diff(self, diff)
@@ -77,5 +77,5 @@ async def _sync_application_commands(self) -> None:
             except Exception as e:
                 self.log.warn(f"Failed to overwrite commands in <Guild id={guild_id}> due to {e}", SyncWarning)
     # Last debug message
-    if self._sync_commands_debug:
+    if self._command_sync_flags._sync_enabled:
         self.log.info("Application Command Sync Completed")
