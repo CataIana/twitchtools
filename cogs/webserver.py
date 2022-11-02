@@ -191,6 +191,7 @@ class RecieverWebServer:
 
     async def notification(self, channel: PartialUser, data: dict):
         streamer = await self.bot.tapi.get_user(user_id=channel.id)
+        streamer.origin = AlertOrigin.callback
         stream = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.callback)
 
         live = stream is not None

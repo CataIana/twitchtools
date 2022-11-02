@@ -572,15 +572,14 @@ class CommandsCog(commands.Cog):
         await self.bot.db.write_callback(streamer, callback)
 
         # Run catchup on streamer immediately
-        stream_status = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.catchup)
-        if stream_status is None:
+        stream = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.catchup)
+        if stream:
+            self.bot.queue.put_nowait(stream)
+        else:
+            streamer.origin = AlertOrigin.catchup
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
-            self.bot.queue.put_nowait(streamer)
-            #self.bot.dispatch("streamer_offline", streamer)
-        else:
-            #self.bot.dispatch("streamer_online", stream_status)
-            self.bot.queue.put_nowait(stream_status)
+            self.bot.queue.put_nowait(streamer)            
 
         embed = Embed(title="Successfully added new streamer",
                       color=self.bot.colour)
@@ -696,6 +695,7 @@ class CommandsCog(commands.Cog):
                 video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
                 self.bot.queue.put_nowait(video)
             else:
+                channel.origin = AlertOrigin.catchup
                 self.bot.queue.put_nowait(channel)
 
         embed = Embed(title="Successfully added new youtube channel",

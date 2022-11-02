@@ -100,7 +100,7 @@ class StreamStateManager(commands.Cog):
                          url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=user.avatar)
         embed.set_footer(text="Mew")
 
-        self.bot.log.info(f"{event.broadcaster.username} => TITLE UPDATE")
+        self.bot.log.info(f"[Twitch] {event.broadcaster.username} => TITLE UPDATE")
 
         # Send embed to each defined channel
         for alert_info in title_callback.alert_roles.values():
@@ -132,7 +132,7 @@ class StreamStateManager(commands.Cog):
         #     return
         if not self.is_live(channel_cache):
             return
-        self.bot.log.info(f"{streamer} => OFFLINE (Twitch)")
+        self.bot.log.info(f"[Twitch]{' [Catchup]' if streamer.origin == AlertOrigin.catchup else ''} {streamer} => OFFLINE")
         # Iterate through all live channels, if applicable, either deleting them or renaming them to stream-offline depending on mode
         for channel_id in channel_cache.get("live_channels", []):
             channel = self.bot.get_channel(channel_id)
@@ -243,7 +243,7 @@ class StreamStateManager(commands.Cog):
         #     return
         if not self.is_live(channel_cache):
             return
-        self.bot.log.info(f"{channel.display_name} => OFFLINE (Youtube)")
+        self.bot.log.info(f"[Youtube]{' [Catchup]' if channel.origin == AlertOrigin.catchup else ''} {channel.display_name} => OFFLINE")
         # Iterate through all live channels, if applicable, either deleting them or renaming them to stream-offline depending on mode
         for channel_id in channel_cache.get("live_channels", []):
             c = self.bot.get_channel(channel_id)
@@ -332,7 +332,7 @@ class StreamStateManager(commands.Cog):
             self.bot.log.info(
                 f"Notification cooldown active for {stream.user.username}, restoring old channels/messages")
 
-        self.bot.log.info(f"{stream.user.username} => ONLINE (Twitch)")
+        self.bot.log.info(f"[Twitch]{' [Catchup]' if stream.origin == AlertOrigin.catchup else ''} {stream.user.username} => ONLINE")
 
         # Update cached display name
         if callback.display_name != stream.user.display_name:
@@ -519,7 +519,7 @@ class StreamStateManager(commands.Cog):
                 f"Notification cooldown active for {video.user.display_name}, restoring old channels/messages")
 
         self.bot.log.info(
-            f"{video.user.display_name} => ONLINE (Youtube{' (PREMIERE)' if video.type == YoutubeVideoType.premiere else ''})")
+            f"[Youtube{' Premiere' if video.type == YoutubeVideoType.premiere else ' Stream'}]{' [Catchup]' if video.origin == AlertOrigin.catchup else ''} {video.user.display_name} => ONLINE")
 
         # Update cached display name
         if callback.display_name != video.user.display_name:

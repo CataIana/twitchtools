@@ -24,13 +24,13 @@ class Catchup(commands.Cog):
     @tasks.loop(seconds=1800)
     async def twitch_backup_checks(self):
         await self.twitch_catchup()
-        self.bot.log.info("Ran twitch catchup")
+        self.bot.log.debug("Ran twitch catchup")
 
     # Youtube callbacks are extremely unreliable and need a higher frequency. Also stream ends are only triggered by catchup
     @tasks.loop(seconds=600)
     async def youtube_backup_checks(self):
         await self.youtube_catchup()
-        self.bot.log.info("Ran youtube catchup")
+        self.bot.log.debug("Ran youtube catchup")
 
     @commands.slash_command(description="Owner Only: Run streamer catchup manually")
     @commands.is_owner()
@@ -65,7 +65,7 @@ class Catchup(commands.Cog):
                 self.bot.queue.put_nowait(stream)
             else:
                 self.bot.queue.put_nowait(PartialUser(
-                    streamer_id, callback_info.display_name.lower(), callback_info.display_name))
+                    streamer_id, callback_info.display_name.lower(), callback_info.display_name, origin=AlertOrigin.catchup))
 
     async def youtube_catchup(self):
         await self.bot.wait_until_ready()
@@ -99,11 +99,12 @@ class Catchup(commands.Cog):
             # If channel is live, check cached video to see if finished
             if channel not in non_live_channels:
                 if caches[channel].video_id in ended_videos:
+                    channel.origin = AlertOrigin.catchup
                     self.bot.queue.put_nowait(channel)
                 else:
                     # Video requested here purely for title updates
                     try:
-                        video = await self.bot.yapi.get_stream(caches[channel].video_id, alert_origin=AlertOrigin.catchup)
+                        video = await self.bot.yapi.get_stream(caches[channel].video_id, origin=AlertOrigin.catchup)
                     except VideoStreamEnded:
                         continue
                     except VideoNotStream:
@@ -128,6 +129,7 @@ class Catchup(commands.Cog):
                         await self.bot.db.write_yt_callback(video.user, callback_info)
                     self.bot.queue.put_nowait(video)
                 else:
+                    channel.origin = AlertOrigin.catchup
                     self.bot.queue.put_nowait(channel)
 
 

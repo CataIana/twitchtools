@@ -210,6 +210,7 @@ class http_youtube:
             deleted_video_id = soup.find("link")["href"].split("watch?v=")[-1]
             channel_cache = await self.bot.db.get_yt_channel_cache(channel)
             if channel_cache.is_live and channel_cache.video_id == deleted_video_id:
+                channel.origin = AlertOrigin.callback
                 self.bot.queue.put_nowait(channel)
             self.bot.log.info(
                 f"{display_name} deleted video {deleted_video_id}")
