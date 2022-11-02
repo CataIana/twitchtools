@@ -213,7 +213,7 @@ class http_youtube:
                 channel.origin = AlertOrigin.callback
                 self.bot.queue.put_nowait(channel)
             self.bot.log.info(
-                f"{display_name} deleted video {deleted_video_id}")
+                f"[Youtube] {display_name} deleted video {deleted_video_id}")
             return
         #channel_id = soup.find_all("yt:channelid")[0].text
 
@@ -224,41 +224,41 @@ class http_youtube:
         # Check video in cache
         if id == last_vid_id:
             self.bot.log.info(
-                f"{display_name} updated latest video {id}")
+                f"[Youtube] {display_name} updated latest video {id}")
             try:
                 return await self.get_stream(id)
             except VideoNotFound as e:
-                self.bot.log.info(f"{display_name}: {str(e)}")
+                self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
                 return
             except VideoNotStream as e:
-                self.bot.log.info(f"{display_name}: {str(e)}")
+                self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
                 return
             except VideoStreamEnded as e:
-                self.bot.log.info(f"{display_name}: {str(e)}")
+                self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
                 return
 
         # Check video exists
         try:
             video = await self.get_stream(id)
         except VideoNotFound as e:
-            self.bot.log.info(f"{display_name}: {str(e)}")
+            self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
             return
         except VideoNotStream as e:
-            self.bot.log.info(f"{display_name}: {str(e)}")
+            self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
             return
         except VideoStreamEnded as e:
-            self.bot.log.info(f"{display_name}: {str(e)}")
+            self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
             return
 
         if video.published_at.timestamp() < last_vid_publish_time:
             self.bot.log.info(
-                f"{display_name} updated older video with {id}, ignoring")
+                f"[Youtube] {display_name} updated older video with {id}, ignoring")
             return
 
         await self.bot.db.update_last_yt_vid(video)
 
         self.bot.log.debug(
-            f"Video {id} confirmed as new youtube stream for {display_name}")
+            f"[Youtube] Video {id} confirmed as new youtube stream for {display_name}")
 
         return video
 

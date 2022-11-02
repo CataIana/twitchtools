@@ -1082,7 +1082,7 @@ class CommandsCog(commands.Cog):
     @resubscribe.sub_command(name="twitch", description="Owner Only: Resubscribe every setup twitch callback. Useful for domain changes")
     async def resubscribe_twitch(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        self.bot.log.info("Running twitch subscription resubscribe")
+        self.bot.log.info("[Twitch] Running subscription recreation")
         all_subs = await self.bot.tapi.get_subscriptions()
         all_ids = [s.id for s in all_subs if s.type in [SubscriptionType.STREAM_ONLINE,
                                                         SubscriptionType.STREAM_OFFLINE, SubscriptionType.CHANNEL_UPDATE]]
@@ -1112,13 +1112,12 @@ class CommandsCog(commands.Cog):
     @resubscribe.sub_command(name="youtube", description="Owner Only: Resubscribe every setup youtube callback. Useful for domain changes")
     async def resubscribe_youtube(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        self.bot.log.info("Running youtube subscription resubscribe")
+        self.bot.log.info("[Youtube] Running subscription recreation")
         for channel, channel_data in (await self.bot.db.get_all_yt_callbacks()).items():
             await self.bot.yapi.create_subscription(channel, channel_data["secret"], channel_data["subscription_id"])
             # Minus a day plus 100 seconds, ensures that the subscription never expires
             timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
             await self.bot.db.write_yt_callback_expiration(channel, timestamp)
-            self.bot.log.info(f"Resubscribed {channel.display_name}")
             await asyncio.sleep(0.25)
 
         await ctx.send(f"{self.bot.emotes.success} Recreated live subscriptions!")

@@ -330,7 +330,7 @@ class StreamStateManager(commands.Cog):
 
         if on_cooldown:  # There is a 10 minute cooldown between alerts, but live channels will still be created
             self.bot.log.info(
-                f"Notification cooldown active for {stream.user.username}, restoring old channels/messages")
+                f"[Twitch] Notification cooldown active for {stream.user.username}, restoring old channels/messages")
 
         self.bot.log.info(f"[Twitch]{' [Catchup]' if stream.origin == AlertOrigin.catchup else ''} {stream.user.username} => ONLINE")
 
@@ -511,12 +511,12 @@ class StreamStateManager(commands.Cog):
                             pass
             if video.origin == AlertOrigin.callback:
                 self.bot.log.info(
-                    f"Received alert while already live for {video.user.display_name}, ignoring")
+                    f"[Youtube] Received alert while already live for {video.user.display_name}, ignoring")
             return
 
         if on_cooldown:  # There is a 10 minute cooldown between alerts, but live channels will still be created
             self.bot.log.info(
-                f"Notification cooldown active for {video.user.display_name}, restoring old channels/messages")
+                f"[Youtube] Notification cooldown active for {video.user.display_name}, restoring old channels/messages")
 
         self.bot.log.info(
             f"[Youtube{' Premiere' if video.type == YoutubeVideoType.premiere else ' Stream'}]{' [Catchup]' if video.origin == AlertOrigin.catchup else ''} {video.user.display_name} => ONLINE")

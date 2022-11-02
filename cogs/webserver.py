@@ -58,7 +58,7 @@ class RecieverWebServer:
             timestamp = request.headers["Twitch-Eventsub-Message-Timestamp"]
             signature = request.headers['Twitch-Eventsub-Message-Signature']
         except KeyError as e:
-            self.bot.log.info(f"Twitch request Denied. Missing Key {e}")
+            self.bot.log.info(f"[Twitch] Request Denied. Missing Key {e}")
             return False
         if message_id in notif_cache:
             return None
@@ -88,7 +88,7 @@ class RecieverWebServer:
                 return web.Response(text=challenge)
             callback = await self.bot.db.get_yt_callback_by_id(channel_id)
             if callback is None:
-                self.bot.log.info(f"Youtube request for {channel_id} not found")
+                self.bot.log.info(f"[Youtube] Request for {channel_id} not found")
                 return web.Response(status=404)
 
             try:
@@ -99,14 +99,14 @@ class RecieverWebServer:
                 verify_token = verification.split(":")[-1]
             except KeyError as e:
                 self.bot.log.warning(
-                    f"Youtube subscription failed: Not all arguments provided {e}")
+                    f"[Youtube] Subscription failed: Not all arguments provided {e}")
                 return web.Response(status=404)
 
             if mode == "subscribe" and secret == callback["secret"]:
                 self.bot.dispatch(
                     "youtube_subscription_confirmation", verify_token)
                 self.bot.log.info(
-                    f"Youtube subscription confirmed for {callback['display_name']}")
+                    f"[Youtube] subscription confirmed for {callback['display_name']}")
                 return web.Response(text=challenge)
         return web.Response(status=404)
 
@@ -117,11 +117,11 @@ class RecieverWebServer:
             callback = await self.bot.db.get_yt_callback_by_id(channel_id)
             if callback is None:
                 self.bot.log.info(
-                    f"Youtube request for {channel_id} not found")
+                    f"[Youtube] Request for {channel_id} not found")
                 return web.Response(status=404)
             data = (await request.read()).decode('utf-8')
             self.bot.log.info(
-                f"Youtube notification for {callback['display_name']}")
+                f"[Youtube] Notification for {callback['display_name']}")
             return await self.youtube_notification(PartialYoutubeUser(channel_id, callback["display_name"]), data)
 
         else:
@@ -130,22 +130,22 @@ class RecieverWebServer:
                 callback = await self.bot.db.get_title_callback_by_id(channel_id)
                 if callback is None:
                     self.bot.log.info(
-                        f"Twitch request for {channel_id} not found")
+                        f"[Twitch] Request for {channel_id} not found")
                     return web.Response(status=400)
             channel = PartialUser(
                 channel_id, callback["display_name"].lower(), callback["display_name"])
 
             verified = await self.verify_request(request, callback["secret"])
             if verified == False:
-                self.bot.log.info("Unverified request, ignoring")
+                self.bot.log.info("[Twitch] Unverified request, ignoring")
                 return web.Response(status=400)
             elif verified == None:
-                self.bot.log.info("Request duplicate, ignoring")
+                self.bot.log.info("[Twitch] Request duplicate, ignoring")
                 return web.Response(status=202)
             try:
                 mode = request.headers["Twitch-Eventsub-Message-Type"]
             except KeyError:
-                self.bot.log.info("Missing required parameters")
+                self.bot.log.info("[Twitch] Missing required parameters")
                 return web.Response(status=400)
             data = await request.json()
 
@@ -154,12 +154,12 @@ class RecieverWebServer:
                     self.bot.dispatch("subscription_confirmation",
                                       data["subscription"]["id"])
                     self.bot.log.info(
-                        f"Title Change Subscription confirmed for {channel.display_name}")
+                        f"[Twitch] Title Change Subscription confirmed for {channel.display_name}")
                 else:
                     self.bot.dispatch("subscription_confirmation",
                                       data["subscription"]["id"])
                     self.bot.log.info(
-                        f"Subscription confirmed for {channel.display_name}")
+                        f"[Twitch] Subscription confirmed for {channel.display_name}")
                 challenge = data['challenge']
                 return web.Response(status=202, text=challenge)
             elif mode == "authorization_revoked":
@@ -173,14 +173,14 @@ class RecieverWebServer:
             elif mode == "notification":
                 if callback_type == "titlecallback":
                     self.bot.log.info(
-                        f"Title change notification for {channel.display_name}")
+                        f"[Twitch] Title change notification for {channel.display_name}")
                     return await self.title_notification(channel, data)
                 else:
                     self.bot.log.info(
-                        f"Twitch notification for {channel.display_name}")
+                        f"[Twitch] Twitch notification for {channel.display_name}")
                     return await self.notification(channel, data)
             else:
-                self.bot.log.info("Unknown mode")
+                self.bot.log.info("[Twitch] Unknown mode")
         return web.Response(status=404)
 
     async def title_notification(self, channel: PartialUser, data: dict):
