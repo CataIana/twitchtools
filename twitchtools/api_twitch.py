@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 from aiohttp import ClientSession
 from aiohttp.client_reqrep import ClientResponse
-from disnake import HTTPException
 
 from .enums import AlertOrigin, AlertType, SubscriptionType
 from .exceptions import *

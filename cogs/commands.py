@@ -692,7 +692,7 @@ class CommandsCog(commands.Cog):
         # Run catchup on streamer immediately
         if make_subscriptions:
             if video_id := await self.bot.yapi.is_channel_live(channel):
-                video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
                 self.bot.queue.put_nowait(video)
             else:
                 channel.origin = AlertOrigin.catchup

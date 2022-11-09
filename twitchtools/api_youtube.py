@@ -178,7 +178,7 @@ class http_youtube:
                 ended_videos.append(id)
         return ended_videos
 
-    async def get_stream(self, video_id: str, alert_origin: AlertOrigin = AlertOrigin.callback) -> Optional[YoutubeVideo]:
+    async def get_stream(self, video_id: str, origin: AlertOrigin = AlertOrigin.callback) -> Optional[YoutubeVideo]:
         stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails,status")
         stream_json = await stream.json()
         # Check if video is a stream first
@@ -198,7 +198,7 @@ class http_youtube:
                             snippet_content_json["items"][0]["snippet"],
                             snippet_content_json["items"][0]["contentDetails"],
                             item["status"],
-                            item["liveStreamingDetails"], video_type=self.get_video_type(item), alert_origin=alert_origin)
+                            item["liveStreamingDetails"], video_type=self.get_video_type(item), origin=origin)
 
     async def parse_video_xml(self, channel: PartialYoutubeUser, request_content: str) -> Optional[YoutubeVideo]:
         soup = BeautifulSoup(request_content, "lxml")
