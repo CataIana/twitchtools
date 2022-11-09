@@ -141,7 +141,7 @@ class CommandsCog(commands.Cog):
     async def on_slash_command(self, ctx: ApplicationCustomContext):
         if ctx.application_command:
             self.bot.log.info(
-                f"Handling slash command {ctx.application_command.qualified_name} for {ctx.author} in {ctx.guild.name}")
+                f"[Command] Triggered {ctx.application_command.qualified_name} by {ctx.author} in {ctx.guild.name}")
         else:
             self.bot.log.info(f"Attemped to run invalid slash command!")
 
@@ -692,7 +692,7 @@ class CommandsCog(commands.Cog):
         # Run catchup on streamer immediately
         if make_subscriptions:
             if video_id := await self.bot.yapi.is_channel_live(channel):
-                video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
                 self.bot.queue.put_nowait(video)
             else:
                 channel.origin = AlertOrigin.catchup

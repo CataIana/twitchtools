@@ -39,7 +39,7 @@ class RecieverWebServer:
         await self.bot.wait_until_ready()
         channel_id = request.match_info["channel_id"]
         callback_type = request.match_info["callback_type"]
-        self.bot.log.info(f"{request.method} to {callback_type} for {channel_id}")
+        self.bot.log.info(f"[{request.method}] {callback_type} for {channel_id}")
         if request.method == 'POST':
             return await self.post_request(request, callback_type, channel_id)
         elif request.method == "GET":

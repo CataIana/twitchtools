@@ -116,7 +116,7 @@ class Catchup(commands.Cog):
                 # Otherwise, check if channel is live, and fetch video that is live
                 if video_id := new_live_channels.get(channel, None):
                     try:
-                        video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                        video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
                     except VideoStreamEnded:
                         continue
                     except VideoNotStream:
