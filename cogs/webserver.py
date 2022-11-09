@@ -29,7 +29,7 @@ class RecieverWebServer:
         runner = web.AppRunner(self.web_server)
         await runner.setup()
         await web.TCPSite(runner, host="localhost", port=self.port).start()
-        self.bot.log.info(f"Webserver running on localhost:{self.port}")
+        self.bot.log.info(f"[Webserver] Running on localhost:{self.port}")
         return self.web_server
 
     async def _info(self, request: web.Request):
@@ -39,7 +39,7 @@ class RecieverWebServer:
         await self.bot.wait_until_ready()
         channel_id = request.match_info["channel_id"]
         callback_type = request.match_info["callback_type"]
-        self.bot.log.info(f"[{request.method}] {callback_type} for {channel_id}")
+        self.bot.log.info(f"[Webserver] {request.method} {callback_type} for {channel_id}")
         if request.method == 'POST':
             return await self.post_request(request, callback_type, channel_id)
         elif request.method == "GET":
@@ -206,6 +206,7 @@ class RecieverWebServer:
         return web.Response(status=202)
 
     async def youtube_notification(self, channel: PartialYoutubeUser, data: str):
+        self.bot.test = (channel, data)
         video = await self.bot.yapi.parse_video_xml(channel, data)
 
         if video:

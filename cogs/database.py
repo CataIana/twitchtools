@@ -26,6 +26,7 @@ class DB(commands.Cog, name="Database Cog"):
         self._timeout: int = 5000
         self._uri: str = self.bot.db_connect_uri
         self.bot.db = self
+        self.trying_to_connect = False
 
     @property
     def is_connected(self) -> bool:
@@ -36,7 +37,7 @@ class DB(commands.Cog, name="Database Cog"):
 
     def cog_unload(self):
         if self.is_connected:
-            self.bot.log.info("Disconnecting from DB")
+            self.bot.log.info("[Database] Disconnecting")
             self.bot._db_ready.clear()
             self._mongo.close()
             self.bot.db = None
@@ -46,20 +47,22 @@ class DB(commands.Cog, name="Database Cog"):
         self._mongo = motor.motor_asyncio.AsyncIOMotorClient(
             self._uri, serverSelectionTimeoutMS=self._timeout)
         failed_attempts = 0
+        self.trying_to_connect = True
         while not self.is_connected and not self.bot.is_closed():
             try:
                 await self._mongo.server_info()
                 self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo["twitchtools"]
                 self.bot._db_ready.set()
-                self.bot.log.info("Connected to database")
+                self.bot.log.info("[Database] Connected")
             except ServerSelectionTimeoutError as e:
-                self.bot.log.error(f"Failed to connect to database! {e._message}")
+                self.bot.log.error(f"[Database] Failed to connect! {e._message}")
                 # Multiply exponentially with max wait of 2 minutes
                 await sleep(min((120, 2**failed_attempts)))
                 failed_attempts += 1
+        self.trying_to_connect = False
 
     async def check_connect(self):
-        if not self.is_connected:
+        if not self.is_connected and not self.trying_to_connect:
             self.bot.log.info(f"DB is not connected, reconnecting...")
             await self.connect()
             if not self.is_connected:
