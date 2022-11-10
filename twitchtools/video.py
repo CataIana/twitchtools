@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Union
 
 from dateutil import parser
@@ -68,7 +69,14 @@ class YoutubeVideo:
         self.duration: int = get_total_seconds(content["duration"])
         self.is_live: bool = True if snippet.get(
             "liveBroadcastContent", None) == "live" else False
-        self.started_at = parser.parse(stream["actualStartTime"])
+        if stream.get("actualStartTime", None):
+            self.started_at: Optional[datetime] = parser.parse(stream["actualStartTime"])
+        else:
+            self.started_at: Optional[datetime] = None
+        if stream.get("scheduledStartTime", None):
+            self.scheduled_at: Optional[datetime] = parser.parse(stream["scheduledStartTime"])
+        else:
+            self.scheduled_at: Optional[datetime] = None
         self.created_at = self.started_at
         self.view_count: Optional[int] = int(stream.get("concurrentViewers", 0)) or None
         self.origin: AlertOrigin = origin

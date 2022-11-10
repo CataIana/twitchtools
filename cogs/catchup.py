@@ -84,8 +84,10 @@ class Catchup(commands.Cog):
         ) if not caches[c].get("is_live", False)]
         # Fetch recent video IDs from each channel. No API cost. Only check non live channels. Returns dict[channel, list[video_id]]
         recent_vids = await self.bot.yapi.get_recent_video_ids(non_live_channels)
+        self.bot.log.debug(f"Recent Video IDs for Channels: {recent_vids}")
         # Returns dict containing each channel as key and video id as value. Return empty dict if none
         new_live_channels = await self.bot.yapi.are_videos_live(recent_vids)
+        self.bot.log.debug(f"New Live Channels: {new_live_channels}")
 
         # Online -> offline handling
 
@@ -105,11 +107,7 @@ class Catchup(commands.Cog):
                     # Video requested here purely for title updates
                     try:
                         video = await self.bot.yapi.get_stream(caches[channel].video_id, origin=AlertOrigin.catchup)
-                    except VideoStreamEnded:
-                        continue
-                    except VideoNotStream:
-                        continue
-                    except VideoNotFound:
+                    except (VideoNotFound, VideoNotStream, VideoStreamEnded):
                         continue
                     self.bot.queue.put_nowait(video)
             else:
@@ -117,11 +115,7 @@ class Catchup(commands.Cog):
                 if video_id := new_live_channels.get(channel, None):
                     try:
                         video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
-                    except VideoStreamEnded:
-                        continue
-                    except VideoNotStream:
-                        continue
-                    except VideoNotFound:
+                    except (VideoNotFound, VideoNotStream, VideoStreamEnded):
                         continue
                     # Update display name if needed
                     if callback_info.display_name != video.user.display_name:

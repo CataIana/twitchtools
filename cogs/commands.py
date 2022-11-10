@@ -12,6 +12,7 @@ from typing import Callable, TypeVar
 
 import disnake
 import psutil
+from dateutil import parser, tz
 from disnake import Embed, Role, TextChannel
 from disnake.ext import commands
 from disnake.utils import utcnow
@@ -19,10 +20,10 @@ from munch import munchify
 
 from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
-                         Confirm, PartialUser, SortableTextPaginator,
-                         SubscriptionError, SubscriptionType, TextPaginator,
-                         User, YoutubeSubscription, YoutubeUser,
-                         human_timedelta)
+                         Confirm, PartialUser, PartialYoutubeUser,
+                         SortableTextPaginator, SubscriptionError,
+                         SubscriptionType, TextPaginator, User,
+                         YoutubeSubscription, YoutubeUser, human_timedelta)
 
 LEASE_SECONDS = 828000
 

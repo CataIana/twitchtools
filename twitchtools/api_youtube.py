@@ -131,6 +131,30 @@ class http_youtube:
             return True
         return False
 
+    def is_scheduled_stream(self, item: dict) -> bool:
+        """Return true if the item is a scheduled stream that hasn't started"""
+        details = item.get("liveStreamingDetails", {})
+        status = item.get("status", {})
+        if details.get("scheduledStartTime", None) is None:
+            return False
+        if details.get("actualStartTime", None) is not None:
+            return False
+        if status.get("uploadStatus", None) != "uploaded":
+            return False
+        return True
+
+    def is_scheduled_premiere(self, item: dict) -> bool:
+        """Return true if the item is a scheduled stream that hasn't started"""
+        details = item.get("liveStreamingDetails", {})
+        status = item.get("status", {})
+        if details.get("scheduledStartTime", None) is None:
+            return False
+        if details.get("actualStartTime", None) is not None:
+            return False
+        if status.get("uploadStatus", None) != "processed":
+            return False
+        return True
+
     def has_stream_ended(self, item: dict) -> bool:
         details = item.get("liveStreamingDetails", {})
         if details.get("actualEndTime", None):
@@ -148,10 +172,14 @@ class http_youtube:
 
     def get_video_type(self, item: dict) -> YoutubeVideoType:
         video_type = "video"
-        if item.get("liveStreamingDetails", {}).get("actualStartTime", None) is not None:
+        if self.is_stream(item):
             video_type = "stream"
-            if item["status"]["uploadStatus"] == "processed":
+            if self.is_premiere(item):
                 video_type = "premiere"
+        if self.is_scheduled_stream(item):
+            video_type = "scheduled_stream"
+        if self.is_scheduled_premiere(item):
+            video_type = "scheduled_premiere"
         return YoutubeVideoType(video_type)
 
     async def has_video_ended(self, video_id: str) -> Union[str, bool]:
@@ -184,8 +212,10 @@ class http_youtube:
         # Check if video is a stream first
         if stream_json.get("items", []) != []:
             item = stream_json["items"][0]
-            if not self.is_stream(item):
-                raise VideoNotStream(video_id, video_type=self.get_video_type(item).value)
+            video_type = self.get_video_type(item)
+            # self.bot.log.info(f"Scheduled Stream: {self.is_scheduled_stream(item)}")
+            if video_type == YoutubeVideoType.video:
+                raise VideoNotStream(video_id, video_type=video_type.value)
             if self.has_stream_ended(item):
                 raise VideoStreamEnded(video_id)
         else:
@@ -198,7 +228,26 @@ class http_youtube:
                             snippet_content_json["items"][0]["snippet"],
                             snippet_content_json["items"][0]["contentDetails"],
                             item["status"],
-                            item["liveStreamingDetails"], video_type=self.get_video_type(item), origin=origin)
+                            item["liveStreamingDetails"], video_type=video_type, origin=origin)
+    
+    async def get_video(self, video_id: str, origin: AlertOrigin = AlertOrigin.unavailable) -> Optional[YoutubeVideo]:
+        stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails,status")
+        stream_json = await stream.json()
+        # Check if video is a stream first
+        if stream_json.get("items", []) != []:
+            item = stream_json["items"][0]
+            video_type = self.get_video_type(item)
+        else:
+            raise VideoNotFound(video_id)
+        # Fetch more info if stream is live
+        snippet_content = await self._request(f"{self.base}/videos?id={video_id}&part=snippet,contentDetails")
+        snippet_content_json = await snippet_content.json()
+        # Pass requests to video class
+        return YoutubeVideo(video_id,
+                            snippet_content_json["items"][0]["snippet"],
+                            snippet_content_json["items"][0]["contentDetails"],
+                            item["status"],
+                            item["liveStreamingDetails"], video_type=video_type, origin=origin)
 
     async def parse_video_xml(self, channel: PartialYoutubeUser, request_content: str) -> Optional[YoutubeVideo]:
         soup = BeautifulSoup(request_content, "lxml")
@@ -227,26 +276,14 @@ class http_youtube:
                 f"[Youtube] {display_name} updated latest video {id}")
             try:
                 return await self.get_stream(id)
-            except VideoNotFound as e:
-                self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
-                return
-            except VideoNotStream as e:
-                self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
-                return
-            except VideoStreamEnded as e:
+            except (VideoNotFound, VideoNotStream, VideoStreamEnded) as e:
                 self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
                 return
 
         # Check video exists
         try:
             video = await self.get_stream(id)
-        except VideoNotFound as e:
-            self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
-            return
-        except VideoNotStream as e:
-            self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
-            return
-        except VideoStreamEnded as e:
+        except (VideoNotFound, VideoNotStream, VideoStreamEnded) as e:
             self.bot.log.info(f"[Youtube] {display_name}: {str(e)}")
             return
 
@@ -258,7 +295,7 @@ class http_youtube:
         await self.bot.db.update_last_yt_vid(video)
 
         self.bot.log.debug(
-            f"[Youtube] Video {id} confirmed as new youtube stream for {display_name}")
+            f"[Youtube] {id} new {video.type} for {display_name}")
 
         return video
 
@@ -307,7 +344,8 @@ class http_youtube:
             stream_json = await stream.json()
             # Check if video is a stream and return ID if so
             for item in stream_json["items"]:
-                if self.is_stream(item) and not self.has_stream_ended(item):
+                video_type = self.get_video_type(item)
+                if video_type != YoutubeVideoType.video and not self.has_stream_ended(item):
                     for c, v in video_ids.items():
                         if item["id"] in v:
                             channel = c
