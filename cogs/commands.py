@@ -12,6 +12,7 @@ from typing import Callable, TypeVar
 
 import disnake
 import psutil
+from dateutil import parser, tz
 from disnake import Embed, Role, TextChannel
 from disnake.ext import commands
 from disnake.utils import utcnow
@@ -19,7 +20,8 @@ from munch import munchify
 
 from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
-                         Confirm, PartialUser, SortableTextPaginator,
+                         Confirm, PartialUser, PartialYoutubeUser,
+                         PlatformChoice, SortableTextPaginator,
                          SubscriptionError, SubscriptionType, TextPaginator,
                          User, YoutubeSubscription, YoutubeUser,
                          human_timedelta)
@@ -31,11 +33,6 @@ READABLE_MODES = {
     1: "Notification Only",
     2: "Notification + Persistent Channel"
 }
-
-
-class PlatformChoice(str, Enum):
-    Youtube = "youtube"
-    Twitch = "twitch"
 
 
 class TimestampOptions(Enum):
@@ -141,7 +138,7 @@ class CommandsCog(commands.Cog):
     async def on_slash_command(self, ctx: ApplicationCustomContext):
         if ctx.application_command:
             self.bot.log.info(
-                f"Handling slash command {ctx.application_command.qualified_name} for {ctx.author} in {ctx.guild.name}")
+                f"[Command] Triggered {ctx.application_command.qualified_name} by {ctx.author} in {ctx.guild.name}")
         else:
             self.bot.log.info(f"Attemped to run invalid slash command!")
 
@@ -585,15 +582,14 @@ class CommandsCog(commands.Cog):
         await self.bot.db.write_callback(streamer, callback)
 
         # Run catchup on streamer immediately
-        stream_status = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.catchup)
-        if stream_status is None:
+        stream = await self.bot.tapi.get_stream(streamer, origin=AlertOrigin.catchup)
+        if stream:
+            self.bot.queue.put_nowait(stream)
+        else:
+            streamer.origin = AlertOrigin.catchup
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
-            self.bot.queue.put_nowait(streamer)
-            #self.bot.dispatch("streamer_offline", streamer)
-        else:
-            #self.bot.dispatch("streamer_online", stream_status)
-            self.bot.queue.put_nowait(stream_status)
+            self.bot.queue.put_nowait(streamer)            
 
         embed = Embed(title="Successfully added new streamer",
                       color=self.bot.colour)
@@ -719,9 +715,10 @@ class CommandsCog(commands.Cog):
         # Run catchup on streamer immediately
         if make_subscriptions:
             if video_id := await self.bot.yapi.is_channel_live(channel):
-                video = await self.bot.yapi.get_stream(video_id, alert_origin=AlertOrigin.catchup)
+                video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
                 self.bot.queue.put_nowait(video)
             else:
+                channel.origin = AlertOrigin.catchup
                 self.bot.queue.put_nowait(channel)
 
         embed = Embed(title="Successfully added new youtube channel",
@@ -1117,7 +1114,7 @@ class CommandsCog(commands.Cog):
     @resubscribe.sub_command(name="twitch", description="Owner Only: Resubscribe every setup twitch callback. Useful for domain changes")
     async def resubscribe_twitch(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        self.bot.log.info("Running twitch subscription resubscribe")
+        self.bot.log.info("[Twitch] Running subscription recreation")
         all_subs = await self.bot.tapi.get_subscriptions()
         all_ids = [s.id for s in all_subs if s.type in [SubscriptionType.STREAM_ONLINE,
                                                         SubscriptionType.STREAM_OFFLINE, SubscriptionType.CHANNEL_UPDATE]]
@@ -1147,13 +1144,12 @@ class CommandsCog(commands.Cog):
     @resubscribe.sub_command(name="youtube", description="Owner Only: Resubscribe every setup youtube callback. Useful for domain changes")
     async def resubscribe_youtube(self, ctx: ApplicationCustomContext):
         await ctx.response.defer()
-        self.bot.log.info("Running youtube subscription resubscribe")
+        self.bot.log.info("[Youtube] Running subscription recreation")
         for channel, channel_data in (await self.bot.db.get_all_yt_callbacks()).items():
             await self.bot.yapi.create_subscription(channel, channel_data["secret"], channel_data["subscription_id"])
             # Minus a day plus 100 seconds, ensures that the subscription never expires
             timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
             await self.bot.db.write_yt_callback_expiration(channel, timestamp)
-            self.bot.log.info(f"Resubscribed {channel.display_name}")
             await asyncio.sleep(0.25)
 
         await ctx.send(f"{self.bot.emotes.success} Recreated live subscriptions!")

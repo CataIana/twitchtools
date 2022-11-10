@@ -378,3 +378,14 @@ class YoutubeVideoType(Enum):
     video = "video"
     premiere = "premiere"
     stream = "stream"
+    scheduled_premiere = "scheduled_premiere"
+    scheduled_stream = "scheduled_stream"
+
+    # Override str conversion to return value so we don't have to add .value to every usage
+    def __str__(self):
+        # return "%s.%s" % (self.__class__.__name__, self._name_)
+        return self._value_
+
+class PlatformChoice(str, Enum):
+    Youtube = "youtube"
+    Twitch = "twitch"

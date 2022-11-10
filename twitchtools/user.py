@@ -4,17 +4,18 @@ from typing import Optional
 from dateutil import parser
 
 from .asset import Avatar, OfflineImage
-from .enums import BroadcasterType, UserType
+from .enums import AlertOrigin, BroadcasterType, UserType
 
 
 class PartialUser:
-    def __init__(self, user_id, user_login, display_name):
+    def __init__(self, user_id, user_login, display_name, origin: Optional[AlertOrigin] = None):
         self.user_id: int = int(user_id)
         self.id: int = int(user_id)
         self.login: str = user_login
         self.name: str = user_login
         self.username: str = user_login
         self.display_name: str = display_name
+        self.origin: Optional[AlertOrigin] = origin
 
     def __str__(self) -> str:
         return self.login
@@ -27,10 +28,11 @@ class PartialUser:
 
 
 class PartialYoutubeUser:
-    def __init__(self, user_id: str, display_name: str):
+    def __init__(self, user_id: str, display_name: str, origin: Optional[AlertOrigin] = AlertOrigin.unavailable):
         self.user_id: str = user_id
         self.id: str = user_id
         self.display_name: str = display_name
+        self.origin: AlertOrigin = origin
 
     def __str__(self) -> str:
         return self.display_name
@@ -62,8 +64,6 @@ class User(PartialUser):
 
 class YoutubeUser(PartialYoutubeUser):
     def __init__(self, id: str, snippet: dict, **kwargs):
-        self.user_id: str = id
-        self.id: str = id
-        self.display_name: str = snippet["title"]
+        super().__init__(id, snippet["title"])
         self.description: str = snippet["description"]
         self.avatar_url: str = snippet["thumbnails"]["high"]["url"]

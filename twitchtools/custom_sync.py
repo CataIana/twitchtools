@@ -16,13 +16,13 @@ def _show_diff(self, diff: Dict[str, List[ApplicationCommand]]) -> None:
     to_delete = f", ".join(cmd.name for cmd in diff["delete"]) or None
     #no_changes = f", ".join(cmd.name for cmd in diff["no_changes"]) or None
     if to_upsert:
-        self.log.info(f"Application Commands To Upsert: {to_upsert}")
+        self.log.info(f"[Discord] Application Commands To Upsert: {to_upsert}")
     if to_edit:
-        self.log.info(f"Application Commands To Edit: {to_edit}")
+        self.log.info(f"[Discord] Application Commands To Edit: {to_edit}")
     if to_delete:
-        self.log.info(f"Application Commands To Delete: {to_delete}")
+        self.log.info(f"[Discord] Application Commands To Delete: {to_delete}")
     if not to_upsert and not to_edit and not to_delete:
-        self.log.info("No changes to make")
+        self.log.info("[Discord] No changes to make")
 
 async def _sync_application_commands(self) -> None:
     if TYPE_CHECKING:
@@ -47,7 +47,7 @@ async def _sync_application_commands(self) -> None:
 
     if self._command_sync_flags._sync_enabled:
         if update_required:
-            self.log.info("Updating application commands")
+            self.log.info("[Discord] Updating application commands")
             _show_diff(self, diff)
 
     if update_required:
@@ -56,7 +56,7 @@ async def _sync_application_commands(self) -> None:
             to_send = diff["no_changes"] + diff["edit"] + diff["upsert"]
             await self.bulk_overwrite_global_commands(to_send)
         except Exception as e:
-            self.log.warn(f"Global command override failed due to {e}", SyncWarning)
+            self.log.warn(f"[Discord] Global command override failed due to {e}", SyncWarning)
     # Same process but for each specified guild individually.
     # Notice that we're not doing this for every single guild for optimisation purposes.
     # See the note in :meth:`_cache_application_commands` about guild app commands.
@@ -67,7 +67,7 @@ async def _sync_application_commands(self) -> None:
         # Show diff
         if self._command_sync_flags._sync_enabled:
             if update_required:
-                self.log.info(f"Updating application commands in {self.get_guild(int(guild_id))}")
+                self.log.info(f"[Discord] Updating application commands in {self.get_guild(int(guild_id))}")
                 _show_diff(self, diff)
         # Do API requests and cache
         if update_required:
@@ -75,7 +75,7 @@ async def _sync_application_commands(self) -> None:
                 to_send = diff["no_changes"] + diff["edit"] + diff["upsert"]
                 await self.bulk_overwrite_guild_commands(guild_id, to_send)
             except Exception as e:
-                self.log.warn(f"Failed to overwrite commands in <Guild id={guild_id}> due to {e}", SyncWarning)
+                self.log.warn(f"[Discord] Failed to overwrite commands in <Guild id={guild_id}> due to {e}", SyncWarning)
     # Last debug message
     if self._command_sync_flags._sync_enabled:
-        self.log.info("Application Command Sync Completed")
+        self.log.info("[Discord] Application Command Sync Completed")

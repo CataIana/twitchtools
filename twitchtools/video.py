@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Union
 
 from dateutil import parser
@@ -51,7 +52,7 @@ class Video:
 
 
 class YoutubeVideo:
-    def __init__(self, id: str, snippet: dict, content: dict, status: dict, stream: dict, video_type: YoutubeVideoType, alert_origin: AlertOrigin, **kwargs):
+    def __init__(self, id: str, snippet: dict, content: dict, status: dict, stream: dict, video_type: YoutubeVideoType, origin: AlertOrigin, **kwargs):
         self.id: str = id
         self.video_id: str = self.id
         self.channel = PartialYoutubeUser(
@@ -68,10 +69,17 @@ class YoutubeVideo:
         self.duration: int = get_total_seconds(content["duration"])
         self.is_live: bool = True if snippet.get(
             "liveBroadcastContent", None) == "live" else False
-        self.started_at = parser.parse(stream["actualStartTime"])
+        if stream.get("actualStartTime", None):
+            self.started_at: Optional[datetime] = parser.parse(stream["actualStartTime"])
+        else:
+            self.started_at: Optional[datetime] = None
+        if stream.get("scheduledStartTime", None):
+            self.scheduled_at: Optional[datetime] = parser.parse(stream["scheduledStartTime"])
+        else:
+            self.scheduled_at: Optional[datetime] = None
         self.created_at = self.started_at
         self.view_count: Optional[int] = int(stream.get("concurrentViewers", 0)) or None
-        self.origin: AlertOrigin = alert_origin
+        self.origin: AlertOrigin = origin
         self.upload_status: str = status["uploadStatus"]
         self.privacy_status: str = status["privacyStatus"]
         self.made_for_kids: bool = status["madeForKids"]

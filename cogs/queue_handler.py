@@ -47,12 +47,12 @@ class QueueHandler(commands.Cog):
             elif isinstance(item, YoutubeVideo):
                 if self.status_cog:
                     await self.status_cog.on_youtube_streamer_online(item)
-                self.bot.dispatch("title_change", item)
+                self.bot.dispatch("youtube_streamer_online", item)
 
             elif isinstance(item, (YoutubeUser, PartialYoutubeUser)):
                 if self.status_cog:
                     await self.status_cog.on_youtube_streamer_offline(item)
-                self.bot.dispatch("title_change", item)
+                self.bot.dispatch("youtube_streamer_offline", item)
 
             else:
                 self.bot.log.warn(
