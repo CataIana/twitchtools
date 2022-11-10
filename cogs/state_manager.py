@@ -92,7 +92,7 @@ class StreamStateManager(commands.Cog):
         if not callback: return
         if not self.is_live(channel_cache): return
 
-        self.bot.log.info(f"[Twitch]{self.is_catchup(streamer)} {streamer} => OFFLINE")
+        self.bot.log.info(f"[Twitch]{self.is_catchup(streamer)} {streamer.display_name} => OFFLINE")
 
         await self.set_channels_offline(callback, channel_cache)
         await self.set_twitch_alerts_offline(streamer, channel_cache)
@@ -487,8 +487,7 @@ class StreamStateManager(commands.Cog):
                 description=f"Streaming {item.game}\n[Watch Stream](https://twitch.tv/{item.broadcaster.name})",
                 colour=TWITCH_PURPLE, timestamp=kwargs["stream"].started_at)
             embed.set_author(name=f"{item.broadcaster.display_name} is now live on Twitch!",
-                             url=f"https://twitch.tv/{item.broadcaster.username}", icon_url=item.user.avatar)
-            embed.set_footer(text="Mew")
+                             url=f"https://twitch.tv/{item.broadcaster.username}", icon_url=kwargs["stream"].user.avatar)
 
         elif isinstance(item, YoutubeVideo):
             embed = disnake.Embed(
