@@ -380,3 +380,7 @@ class YoutubeVideoType(Enum):
     def __str__(self):
         # return "%s.%s" % (self.__class__.__name__, self._name_)
         return self._value_
+
+class PlatformChoice(str, Enum):
+    Youtube = "youtube"
+    Twitch = "twitch"

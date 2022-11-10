@@ -183,6 +183,7 @@ class http_youtube:
         return YoutubeVideoType(video_type)
 
     async def has_video_ended(self, video_id: str) -> Union[str, bool]:
+        """Returns the end date if the provided stream has ended, otherwise returns false"""
         stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails")
         stream_json = await stream.json()
         # Check if video is a stream first

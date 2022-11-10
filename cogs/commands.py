@@ -21,9 +21,10 @@ from munch import munchify
 from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
                          Confirm, PartialUser, PartialYoutubeUser,
-                         SortableTextPaginator, SubscriptionError,
-                         SubscriptionType, TextPaginator, User,
-                         YoutubeSubscription, YoutubeUser, human_timedelta)
+                         PlatformChoice, SortableTextPaginator,
+                         SubscriptionError, SubscriptionType, TextPaginator,
+                         User, YoutubeSubscription, YoutubeUser,
+                         human_timedelta)
 
 LEASE_SECONDS = 828000
 
@@ -32,11 +33,6 @@ READABLE_MODES = {
     1: "Notification Only",
     2: "Notification + Persistent Channel"
 }
-
-
-class PlatformChoice(str, Enum):
-    Youtube = "youtube"
-    Twitch = "twitch"
 
 
 class TimestampOptions(Enum):
