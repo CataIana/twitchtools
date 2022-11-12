@@ -32,7 +32,9 @@ class DB(commands.Cog, name="Database Cog"):
     def is_connected(self) -> bool:
         return self.bot._db_ready.is_set()
 
-    async def cog_load(self):
+    @commands.Cog.listener()
+    async def on_connect(self):
+        self.db_name = f"twitchtools-{self.bot.user.id}"
         await self.connect()
 
     def cog_unload(self):
@@ -51,9 +53,9 @@ class DB(commands.Cog, name="Database Cog"):
         while not self.is_connected and not self.bot.is_closed():
             try:
                 await self._mongo.server_info()
-                self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo["twitchtools"]
+                self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo[self.db_name]
                 self.bot._db_ready.set()
-                self.bot.log.info("[Database] Connected")
+                self.bot.log.info(f"[Database] Connected ({self.db_name})")
             except ServerSelectionTimeoutError as e:
                 self.bot.log.error(f"[Database] Failed to connect! {e._message}")
                 # Multiply exponentially with max wait of 2 minutes
