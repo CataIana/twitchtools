@@ -94,7 +94,7 @@ class StreamStateManager(commands.Cog):
         if not callback: return
         if not self.is_live(channel_cache): return
 
-        self.bot.log.info(f"[Twitch]{self.is_catchup(streamer)} {streamer} => OFFLINE")
+        self.bot.log.info(f"[Twitch]{self.is_catchup(streamer)} {streamer.display_name} => OFFLINE")
 
         await self.set_channels_offline(callback, channel_cache)
         await self.set_twitch_alerts_offline(streamer, callback, channel_cache)
@@ -203,14 +203,19 @@ class StreamStateManager(commands.Cog):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
 
+        # Ignore these for now
+        if video.type in [YoutubeVideoType.scheduled_premiere, YoutubeVideoType.scheduled_stream]:
+            return
+
         channel_cache = await self.bot.db.get_yt_channel_cache(video.channel)
         callback = await self.bot.db.get_yt_callback(video.channel)
         on_cooldown = self.on_cooldown(channel_cache.get("alert_cooldown", 0))
 
         # Update title details if streamer is already live
         if self.is_live(channel_cache):
-            await self.update_youtube_title(video, channel_cache)
-            if video.origin == AlertOrigin.callback:
+            if video.origin == AlertOrigin.catchup:
+                await self.update_youtube_title(video, channel_cache)
+            elif video.origin == AlertOrigin.callback:
                 self.bot.log.info(f"[Twitch] Callback received for {video.user.display_name} while live, ignoring")
             return
 
@@ -287,8 +292,10 @@ class StreamStateManager(commands.Cog):
                 if item.type == YoutubeVideoType.premiere and not alert_info.enable_premieres:
                     continue
                 message = f"{user_escaped} is live on Youtube!"
+                link = f"https://youtube.com/watch?v={item.id}"
             else:
                 message = f"{user_escaped} is live on Twitch!"
+                link = f"https://twitch.tv/{item.user.username}"
 
             # Format role mention
             if alert_info.role_id == "everyone":
@@ -354,15 +361,15 @@ class StreamStateManager(commands.Cog):
 
                     # Create temporary channel and add channel id to channel cache
                     try:
-                        channel = await guild.create_text_channel(f"🔴{item.user.username}", overwrites=NewChannelOverrides, position=0)
+                        channel = await guild.create_text_channel(f"🔴{item.user.display_name.lower()}", overwrites=NewChannelOverrides, position=0)
                         if channel:
                             user_escaped = item.user.display_name.replace(
                                 '_', '\_')
-                            await channel.send(f"{user_escaped} is live! https://twitch.tv/{item.user.name}")
+                            await channel.send(f"{user_escaped} is live! {link}")
                             live_channels.append(channel.id)
                     except disnake.Forbidden:
                         self.bot.log.warning(
-                            f"Error creating text channels for {item.user.username} in guild {guild.name}")
+                            f"Error creating text channels for {item.user.display_name} in guild {guild.name}")
 
                 # Notification is already sent, nothing needed to be done
                 case 1:
@@ -387,13 +394,14 @@ class StreamStateManager(commands.Cog):
     async def update_youtube_title(self, video: YoutubeVideo, channel_cache: YoutubeChannelCache):
         if video.id == channel_cache.video_id:
             title_cache = await self.bot.db.get_yt_title_cache(video.channel)
+            # Only the title can be updated in an embed.
             if title_cache.title != video.title:
                 title_cache.title = video.title
                 await self.bot.db.write_yt_title_cache(video.channel, title_cache)
-            await self.bot.ratelimit_request(video.user)
-            video.user = await self.bot.yapi.get_user(video.user)
-            embed = self.get_stream_embed(video)
-            await self.update_alert_messages(channel_cache, embed)
+                await self.bot.ratelimit_request(video.user)
+                video.user = await self.bot.yapi.get_user(video.user)
+                embed = self.get_stream_embed(video)
+                await self.update_alert_messages(channel_cache, embed)
     
     async def update_alert_messages(self, channel_cache: Union[ChannelCache, YoutubeChannelCache], embed: disnake.Embed):
         for m in channel_cache.get("live_alerts", []):
@@ -548,7 +556,7 @@ class StreamStateManager(commands.Cog):
                 description=f"Streaming {item.game}\n[Watch Stream](https://twitch.tv/{item.broadcaster.name})",
                 colour=TWITCH_PURPLE, timestamp=kwargs["stream"].started_at)
             embed.set_author(name=f"{item.broadcaster.display_name} is now live on Twitch!",
-                             url=f"https://twitch.tv/{item.broadcaster.username}", icon_url=item.user.avatar)
+                             url=f"https://twitch.tv/{item.broadcaster.username}", icon_url=kwargs["stream"].user.avatar)
 
         elif isinstance(item, YoutubeVideo):
             embed = disnake.Embed(
