@@ -175,7 +175,7 @@ class StreamStateManager(commands.Cog):
 
         live_channels, live_alerts, triggered_guilds = await self.send_live_alerts_and_channels(stream, embed, callback, channel_cache)
 
-        if not channel_cache["is_live"]:
+        if not channel_cache.get("is_live", False):
             # Finally, combine all data into channel cache, and update the file
             channel_cache = {
                 "alert_cooldown": int(time()),
@@ -235,7 +235,7 @@ class StreamStateManager(commands.Cog):
 
         live_channels, live_alerts, triggered_guilds = await self.send_live_alerts_and_channels(video, embed, callback, channel_cache)
 
-        if not channel_cache["is_live"]:
+        if not channel_cache.get("is_live", False):
             # Finally, combine all data into channel cache, and update the file
             channel_cache = {
                 "alert_cooldown": int(time()),
@@ -497,11 +497,11 @@ class StreamStateManager(commands.Cog):
                         past_games = f"Was streaming {extracted_game} for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
                     if callback.alert_roles[str(channel.guild.id)].get("show_cest_time", False):
                         cest_tz = tz.gettz("CET")
-                        start_time = embed.timestamp.astimezone(
+                        start_time_cest = embed.timestamp.astimezone(
                             cest_tz).strftime("%H:%M")
-                        end_time = end_time.astimezone(
+                        end_time_cest = end_time.astimezone(
                             cest_tz).strftime("%H:%M %Z")
-                        detailed_length = f"\n{start_time} - {end_time}"
+                        detailed_length = f"\n{start_time_cest} - {end_time_cest}"
                     else:
                         detailed_length = ""
                     embed.description = f"{past_games}{detailed_length}"
@@ -528,11 +528,11 @@ class StreamStateManager(commands.Cog):
                 end_time = parser.parse(video_end_time) if video_end_time else utcnow()
                 if callback["alert_roles"][str(c.guild.id)].get("show_cest_time", False):
                     cest_tz = tz.gettz("CET")
-                    start_time = embed.timestamp.astimezone(
+                    start_time_cest = embed.timestamp.astimezone(
                         cest_tz).strftime("%H:%M")
-                    end_time = end_time.astimezone(
+                    end_time_cest = end_time.astimezone(
                         cest_tz).strftime("%H:%M %Z")
-                    detailed_length = f"\n{start_time} - {end_time}"
+                    detailed_length = f"\n{start_time_cest} - {end_time_cest}"
                 else:
                     detailed_length = ""
                 embed.description = f"Was streaming for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}{detailed_length}"
