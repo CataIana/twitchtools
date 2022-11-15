@@ -9,11 +9,15 @@ This setup requires you have some experience with the command line, as well as c
 
 ## This was built in mind with it being ran behind a reverse proxy (nginx), I run it behind nginx myself and it is highly recommended to do the same
 
-- Download MongoDB Community Server and install it. Make sure you copy down your connection URI, you'll need it for the next step
+- Download MongoDB Community Server, install it and ensure it is running. Make sure you copy down your connection URI, you'll need it for the next step
 - Clone the repo `git clone https://github.com/CataIana/twitchtools.git`
-- Rename `config/exampleauth.json` to `config/auth.json` and fill in the required fields. You will need a twitch application, and a discord bot token, as well as your mongodb connection URI
+- Rename `config/exampleauth.json` to `config/auth.json` and fill in the required fields. You will need:
+  * A twitch application
+  * A discord bot token
+  * A google api key with the youtube data API enabled
+  * Your mongodb connection URI
 - Install the required dependencies `sudo pip3 install -r requirements.txt`
-- The webserver runs on port `18271`, so ensure your reverse proxy forwards your callback to that port. You can change this if necessary in the config
+- The webserver runs on port `18271` by default, so ensure your reverse proxy forwards your callback to that port. You can change this if necessary in the config
 - Finally, run the bot with `python3 main.py` and you should be good to go
 
 ### Ensure your bot has permissions to create slash commands!
