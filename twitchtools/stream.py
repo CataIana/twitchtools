@@ -7,8 +7,6 @@ from .asset import Thumbnail
 from .enums import AlertOrigin, Languages, Live
 from .user import PartialUser, User
 
-type_call = type
-
 
 class Stream:
     def __init__(self, id: int, user_id: int, user_login: str, user_name: str, game_id: int,
