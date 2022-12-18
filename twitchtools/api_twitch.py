@@ -59,7 +59,10 @@ class http_twitch:
                 reauth_data = await reauth.json()
                 raise BadAuthorization(reauth_data["message"])
             reauth_data = await reauth.json()
-            self.access_token = reauth_data['access_token']
+            try:
+                self.access_token = reauth_data['access_token']
+            except KeyError:
+                raise BadAuthorization(f"Error obtaining access token: Status code {reauth.status}. {reauth_data.get('message', 'No message available')}")
             await self.bot.db.write_access_token(self.access_token)
             response = await self.session.request(method=method, url=url, headers=self.headers, **kwargs)
         return response
