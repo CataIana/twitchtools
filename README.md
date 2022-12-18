@@ -3,6 +3,8 @@
 A slash commands based discord bot that uses eventsub based subscriptions for fast live alerts, as well as alerts for title changes when a streamer is offline.
 Also has a bad implementation of syncing bttv/ffz emotes to discord
 
+Python 3.9 minimum
+
 # Setup
 
 This setup requires you have some experience with the command line, as well as creating twitch and discord applications, python, nginx (or another reverse proxy) and mongoDB

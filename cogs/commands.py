@@ -750,7 +750,6 @@ class CommandsCog(commands.Cog):
 
     @staticmethod
     def page_generator(ctx: ApplicationCustomContext, data: dict, sort_by: str, reverse: bool) -> list[str]:
-        #max_length = max([len(a['display_name']) for a in data.values()])
         pages: list[str] = []
         page = [
             f"```nim\n{'Channel':15s} {'Last Live D/M/Y':16s} {'Alert Role':25s} {'Alert Channel':18s} Alert Mode"]
@@ -765,9 +764,12 @@ class CommandsCog(commands.Cog):
             if len(name) >= amount:
                 return f"{name[:amount-3]}..."
             return name
+        
         for streamer_id, alert_info in dict(sorted(data.items(), key=sorter, reverse=reverse)).items():
             if str(ctx.guild.id) in alert_info["alert_roles"].keys():
                 info = alert_info["alert_roles"][str(ctx.guild.id)]
+
+                # Role Name
                 alert_role_id = info.get("role_id", None)
                 if alert_role_id is None:
                     alert_role = "<No Alert Role>"
@@ -779,6 +781,7 @@ class CommandsCog(commands.Cog):
                     else:
                         alert_role = "@deleted-role"
 
+                # Channel
                 channel_override_id = info.get("notif_channel_id", None)
                 channel_override_role = ctx.guild.get_channel(
                     channel_override_id)
@@ -787,6 +790,7 @@ class CommandsCog(commands.Cog):
                 else:
                     channel_override = ""
 
+                # Last Live
                 last_live = alert_info["last_live"]
                 if last_live == 0:
                     last_live = "Unknown"
@@ -794,21 +798,26 @@ class CommandsCog(commands.Cog):
                     last_live = datetime.utcfromtimestamp(
                         last_live).strftime("%d-%m-%y %H:%M")
 
+                # If premieres enabled, youtube only
                 if info.get("enable_premieres", False):
                     premieres = " + Premieres"
                 else:
                     premieres = ""
 
-                page.append(
-                    f"{truncate(alert_info['display_name'], 15):15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}{premieres:33s} {info.get('title_match_phrase', ''):20s}")
-                if len(page) == 14:
-                    if pages == []:
+                new_page_string = f"{truncate(alert_info['display_name'], 15):15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}{premieres:33s} {info.get('title_match_phrase', ''):20s}"
+
+                # Add page
+                # Check if current page length + added string are near character limit. If so, start a new page.
+                if sum(len(p) for p in page) + len(new_page_string) > 1980 or len(page) > 13:
+                    if pages == []: # If this is the first page
                         pages.append(
                             '\n'.join(page[:-1] + [page[-1] + "```"]))
                     else:
                         pages.append(
                             '\n'.join(["```nim\n"] + page[:-1] + [page[-1] + "```"]))
-                    page = []
+                    page = [new_page_string]
+                else:
+                    page.append(new_page_string)
 
         if page != []:
             page = page[:-1] + [page[-1] + "```"]
