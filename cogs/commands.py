@@ -499,7 +499,7 @@ class CommandsCog(commands.Cog):
         callback = await self.bot.db.get_callback(streamer) or {}
         if callback.get("alert_roles", {}).get(str(ctx.guild.id), None):
             view = Confirm(ctx)
-            await ctx.response.send_message(f"{streamer.username} is already setup for this server! Do you want to override the current settings?", view=view)
+            await ctx.response.send_message(f"{streamer.display_name} is already setup for this server! Do you want to override the current settings?", view=view)
             await view.wait()
             if view.value == False or view.value == None:
                 for button in view.children:
@@ -580,7 +580,7 @@ class CommandsCog(commands.Cog):
 
         embed = Embed(title="Successfully added new streamer",
                       color=self.bot.colour)
-        embed.add_field(name="Streamer", value=streamer.username, inline=True)
+        embed.add_field(name="Channel Name", value=streamer.display_name, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
         if alert_role:
@@ -697,8 +697,7 @@ class CommandsCog(commands.Cog):
 
         embed = Embed(title="Successfully added new youtube channel",
                       color=self.bot.colour)
-        embed.add_field(name="Channel",
-                        value=channel.display_name, inline=True)
+        embed.add_field(name="Channel Name", value=channel.display_name, inline=True)
         embed.add_field(name="Channel ID", value=channel.id, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
@@ -910,9 +909,25 @@ class CommandsCog(commands.Cog):
             notification_channel = self.bot.get_channel(notification_channel)
 
         # Create file structure and subscriptions if necessary
-        title_callback = await self.bot.db.get_title_callback(streamer)
+        title_callback = await self.bot.db.get_title_callback(streamer) or {}
+        if title_callback.get("alert_roles", {}).get(str(ctx.guild.id), None):
+            view = Confirm(ctx)
+            await ctx.response.send_message(f"{streamer.display_name} is already setup for this server! Do you want to override the current settings?", view=view)
+            await view.wait()
+            if view.value == False or view.value == None:
+                for button in view.children:
+                    button.disabled = True
+                if view.value == False:
+                    await view.interaction.response.edit_message(content=f"Aborting override", view=view)
+                elif view.value == None:
+                    await ctx.edit_original_message(content=f"Aborting override", view=view)
+                return
+            else:
+                for button in view.children:
+                    button.disabled = True
+                await view.interaction.response.edit_message(view=view)
 
-        if title_callback is None:
+        if title_callback == {}:
             title_callback = {
                 "display_name": streamer.display_name, "alert_roles": {}}
 
@@ -944,7 +959,7 @@ class CommandsCog(commands.Cog):
 
         embed = Embed(
             title="Successfully added new title change alert", color=self.bot.colour)
-        embed.add_field(name="Streamer", value=streamer.username, inline=True)
+        embed.add_field(name="Channel Name", value=streamer.display_name, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
         embed.add_field(name="Alert Role", value=alert_role, inline=True)
