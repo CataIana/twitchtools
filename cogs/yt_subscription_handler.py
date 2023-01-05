@@ -25,12 +25,12 @@ class YTSubscriptionHandler(commands.Cog, name="Youtube Subscription Handler"):
     async def yt_check_expiry(self):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
-        self.bot.log.debug("Resubscribing youtube callbacks")
+        self.bot.log.debug("[Youtube] Resubscribing youtube callbacks")
         for channel, channel_data in (await self.bot.db.get_all_yt_callbacks()).items():
             expiry_time = channel_data.get("expiry_time", 0)
             if expiry_time < datetime.utcnow().timestamp():
                 self.bot.log.info(
-                    f"Resubscribing YT channel {channel.display_name}")
+                    f"[Youtube] Resubscribing YT channel {channel.display_name}")
                 await self.yt_subscribe(channel, channel_data)
 
     async def yt_subscribe(self, channel: PartialYoutubeUser, channel_data: YoutubeCallback):
