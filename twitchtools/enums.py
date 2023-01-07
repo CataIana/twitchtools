@@ -304,6 +304,7 @@ class Callback(Enum):
     online_id: str
     offline_id: str
     title_id: str
+    subscription_id: Optional[str]
 
 
 class YoutubeCallbackAlertInfo(Enum):
