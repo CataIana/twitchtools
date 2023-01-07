@@ -22,7 +22,7 @@ from main import TwitchCallBackBot
 from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
                          Confirm, PartialUser, PartialYoutubeUser,
                          PlatformChoice, SortableTextPaginator,
-                         SubscriptionError, SubscriptionType, TextPaginator,
+                         SubscriptionError, Callback, YoutubeCallback, SubscriptionType, TextPaginator,
                          User, YoutubeSubscription, YoutubeUser,
                          human_timedelta)
 
@@ -563,7 +563,7 @@ class CommandsCog(commands.Cog):
                     sub3 = await self.bot.tapi.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=callback["secret"], alert_type=AlertType.title)
                     callback["title_id"] = sub3.id
             except SubscriptionError as e:
-                await self.twitch_callback_deletion(ctx, streamer, alert_type=AlertType.status)
+                await self.twitch_callback_deletion(ctx, streamer, callback, alert_type=AlertType.status)
                 raise SubscriptionError(str(e))
 
         await self.bot.db.write_callback(streamer, callback)
@@ -679,7 +679,7 @@ class CommandsCog(commands.Cog):
                 sub = await self.bot.yapi.create_subscription(channel, callback["secret"])
                 callback["subscription_id"] = sub.id
             except SubscriptionError as e:
-                await self.youtube_callback_deletion(ctx, channel)
+                await self.youtube_callback_deletion(ctx, channel, callback)
                 raise SubscriptionError(str(e))
             timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
             await self.bot.db.write_yt_callback_expiration(channel, timestamp)
@@ -848,11 +848,12 @@ class CommandsCog(commands.Cog):
                         continue
                     except disnake.HTTPException:
                         continue
-        await self.twitch_callback_deletion(ctx, streamer_obj, alert_type=AlertType.status)
+        await self.twitch_callback_deletion(ctx, streamer_obj, callback, alert_type=AlertType.status)
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {streamer}")
 
     @streamers_delete.sub_command(name="youtube", description="Remove live alerts for a youtube channel")
     async def streamers_delete_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str = commands.Param(autocomplete=youtube_streamer_autocomplete)):
+        await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_yt_callbacks()
         try:
             channel = [c for c in callbacks.keys() if c.display_name ==
@@ -864,23 +865,21 @@ class CommandsCog(commands.Cog):
         if channel is None:
             return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel")
 
-        await self.bot.wait_until_db_ready()
         channel_cache = await self.bot.db.get_yt_channel_cache(channel)
         callback = await self.bot.db.get_yt_callback(channel)
         for channel_id in channel_cache.get("live_channels", []):
-            channel = self.bot.get_channel(channel_id)
-            if channel:
-                if channel.guild == ctx.guild:
+            if c := self.bot.get_channel(channel_id):
+                if c.guild == ctx.guild:
                     try:
-                        if callback["alert_roles"][str(channel.guild.id)]["mode"] == 0:
-                            await channel.delete()
+                        if callback["alert_roles"][str(c.guild.id)]["mode"] == 0:
+                            await c.delete()
                         # elif callbacks[streamer]["alert_roles"][str(channel.guild.id)]["mode"] == 2:
                         #     await channel.edit(name="stream-offline")
                     except disnake.Forbidden:
                         continue
                     except disnake.HTTPException:
                         continue
-        await self.youtube_callback_deletion(ctx, channel)
+        await self.youtube_callback_deletion(ctx, channel, callback)
         await ctx.send(f"{self.bot.emotes.success} Deleted live alerts for {channel.display_name}")
 
     ##########################################################
@@ -952,7 +951,7 @@ class CommandsCog(commands.Cog):
                 sub = await self.bot.tapi.create_subscription(SubscriptionType.CHANNEL_UPDATE, streamer=streamer, secret=title_callback["secret"], alert_type=AlertType.title)
                 title_callback["subscription_id"] = sub.id
             except SubscriptionError as e:
-                await self.twitch_callback_deletion(ctx, streamer, alert_type=AlertType.title)
+                await self.twitch_callback_deletion(ctx, streamer, title_callback, alert_type=AlertType.title)
                 raise SubscriptionError(str(e))
 
         await self.bot.db.write_title_callback(streamer, title_callback)
@@ -1031,7 +1030,9 @@ class CommandsCog(commands.Cog):
 
     ##########################################################
 
-    async def twitch_callback_deletion(self, ctx: ApplicationCustomContext, streamer: User, alert_type: AlertType = AlertType.status):
+    async def twitch_callback_deletion(self, ctx: ApplicationCustomContext, streamer: User, callback: Callback = None, alert_type: AlertType = AlertType.status):
+        await self.bot.wait_until_db_ready()
+        callback = munchify(callback or await self.bot.db.get_callback(streamer))
         if alert_type.name == "status":
             callback = await self.bot.db.get_callback(streamer)
         elif alert_type.name == "title":
@@ -1043,7 +1044,6 @@ class CommandsCog(commands.Cog):
         if callback.alert_roles == {}:
             self.bot.log.info(
                 f"Twitch streamer {streamer.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
-            await self.bot.wait_until_db_ready()
             if alert_type == AlertType.status:
                 try:
                     await self.bot.tapi.delete_subscription(callback.offline_id)
@@ -1074,8 +1074,9 @@ class CommandsCog(commands.Cog):
             elif alert_type.name == "title":
                 await self.bot.db.write_title_callback(streamer, callback)
 
-    async def youtube_callback_deletion(self, ctx: ApplicationCustomContext, channel: YoutubeUser):
-        callback = await self.bot.db.get_yt_callback(channel)
+    async def youtube_callback_deletion(self, ctx: ApplicationCustomContext, channel: YoutubeUser, callback: YoutubeCallback = None):
+        await self.bot.wait_until_db_ready()
+        callback = munchify(callback or await self.bot.db.get_yt_callback(channel))
         try:
             del callback.alert_roles[str(ctx.guild.id)]
         except KeyError:
@@ -1083,7 +1084,6 @@ class CommandsCog(commands.Cog):
         if callback.alert_roles == {}:
             self.bot.log.info(
                 f"Youtube channel {channel.display_name} is no longer enrolled in any alerts, purging callbacks and cache")
-            await self.bot.wait_until_db_ready()
             try:
                 await self.bot.yapi.delete_subscription(YoutubeSubscription(callback.subscription_id, channel, callback.secret))
             except KeyError:
