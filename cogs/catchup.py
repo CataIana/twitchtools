@@ -2,7 +2,9 @@ from typing import TYPE_CHECKING
 
 from disnake.ext import commands, tasks
 
-from twitchtools import AlertOrigin, ApplicationCustomContext, PartialUser
+from twitchtools import (AlertOrigin, ApplicationCustomContext, Callback,
+                         PartialUser, PartialYoutubeUser, YoutubeCallback,
+                         has_manage_permissions)
 from twitchtools.exceptions import (VideoNotFound, VideoNotStream,
                                     VideoStreamEnded)
 
@@ -32,25 +34,43 @@ class Catchup(commands.Cog):
         await self.youtube_catchup()
         self.bot.log.debug("Ran youtube catchup")
 
-    @commands.slash_command(description="Owner Only: Run streamer catchup manually")
-    @commands.is_owner()
+    @commands.slash_command()
     async def catchup(self, ctx: ApplicationCustomContext):
-        await ctx.response.defer()
+        pass
+
+    @catchup.sub_command(name="all", description="Owner Only: Run streamer catchup manually")
+    @commands.is_owner()
+    @commands.cooldown(1, 10, commands.BucketType.default)
+    async def catchup_all(self, ctx: ApplicationCustomContext):
+        await ctx.response.defer(ephemeral=True)
         await self.twitch_catchup()
         await self.youtube_catchup()
         self.bot.log.info("Finished manual catchup")
         await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
+    
+    @catchup.sub_command(name="server", description="Run streamer catchup manually for streamers in this server")
+    @has_manage_permissions()
+    @commands.cooldown(1, 10, commands.BucketType.guild)
+    async def catchup_server(self, ctx: ApplicationCustomContext):
+        await ctx.response.defer(ephemeral=True)
+        twitch_filtered_callbacks = {s: c for s, c in (await self.bot.db.get_all_callbacks()).items() if str(ctx.guild.id) in c.alert_roles.keys()}
+        await self.twitch_catchup(twitch_filtered_callbacks)
+        
+        youtube_filtered_callbacks = {s: c for s, c in (await self.bot.db.get_all_yt_callbacks()).items() if str(ctx.guild.id) in c.alert_roles.keys()}
+        await self.youtube_catchup(youtube_filtered_callbacks)
+        self.bot.log.info(f"Finished manual server catchup for {ctx.guild.name}")
+        await ctx.send(f"{self.bot.emotes.success} Finished server catchup!", ephemeral=True)
 
-    async def twitch_catchup(self):
+    async def twitch_catchup(self, callbacks: dict[str, Callback] = None):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
-        callbacks = await self.bot.db.get_all_callbacks()
+        callbacks = callbacks or await self.bot.db.get_all_callbacks()
         if callbacks == {}:
             return
 
         # Fetch all streamers, returning the currently live ones
         streams = await self.bot.tapi.get_streams(user_ids=list(callbacks.keys()), origin=AlertOrigin.catchup)
-        # We only need the ID from them
+        # We only need the ID from them, as a string due to dict keys only being strings
         online_stream_uids = [str(stream.user.id) for stream in streams]
 
         # Iterate through all callbacks and update all streamers
@@ -67,10 +87,10 @@ class Catchup(commands.Cog):
                 self.bot.queue.put_nowait(PartialUser(
                     streamer_id, callback_info.display_name.lower(), callback_info.display_name, origin=AlertOrigin.catchup))
 
-    async def youtube_catchup(self):
+    async def youtube_catchup(self, callbacks: dict[PartialYoutubeUser, YoutubeCallback] = None):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
-        callbacks = await self.bot.db.get_all_yt_callbacks()
+        callbacks = callbacks or await self.bot.db.get_all_yt_callbacks()
         if callbacks == {}:
             return
 

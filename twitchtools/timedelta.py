@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 
 from dateutil.relativedelta import relativedelta
 
@@ -27,7 +28,7 @@ def human_join(seq, delim=', ', final='or'):
 
     return delim.join(seq[:-1]) + f' {final} {seq[-1]}'
 
-def human_timedelta(dt, *, source=None, accuracy=3, brief=False, suffix=True):
+def human_timedelta(dt: datetime.datetime, *, source: Optional[datetime.datetime] = None, accuracy=3, brief=False, suffix=True):
     now = source or datetime.datetime.now(datetime.timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
