@@ -20,7 +20,7 @@ class ErrorListener(commands.Cog):
         self.bot.log.error(format_exc())
 
     @commands.Cog.listener()
-    async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception):
+    async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception: commands.CommandError):
         if isinstance(exception, (commands.MissingPermissions, commands.NotOwner, commands.MissingRole, commands.CheckFailure, commands.BadArgument, SubscriptionError)):
             return await ctx.send(f"{self.bot.emotes.error} {exception}", ephemeral=True)
         if isinstance(exception, Forbidden):
@@ -30,7 +30,7 @@ class ErrorListener(commands.Cog):
             err_msg = f"{self.bot.emotes.error} There was an error executing this command.\n`{type(exception).__name__}: {exception}`"
         else:
             err_msg = f"{self.bot.emotes.error} There was an error executing this command."
-        await ctx.send(err_msg)
+        await ctx.send(err_msg, ephemeral=True)
 
         exc = ''.join(format_exception(type(exception), exception, exception.__traceback__))
         self.bot.log.error(f"Ignoring exception in command {ctx.application_command.name}:\n{exc}")

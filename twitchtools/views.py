@@ -1,5 +1,4 @@
 from asyncio import iscoroutinefunction
-from pydoc import render_doc
 from typing import Callable, List, Optional, Union
 
 from disnake import ButtonStyle, Emoji, Forbidden, NotFound, PartialEmoji, ui
