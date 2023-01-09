@@ -21,7 +21,7 @@ class ErrorListener(commands.Cog):
 
     @commands.Cog.listener()
     async def on_slash_command_error(self, ctx: ApplicationCustomContext, exception: commands.CommandError):
-        if isinstance(exception, (commands.MissingPermissions, commands.NotOwner, commands.MissingRole, commands.CheckFailure, commands.BadArgument, SubscriptionError)):
+        if isinstance(exception, (commands.MissingPermissions, commands.NotOwner, commands.MissingRole, commands.CheckFailure, commands.BadArgument, commands.CommandOnCooldown, SubscriptionError)):
             return await ctx.send(f"{self.bot.emotes.error} {exception}", ephemeral=True)
         if isinstance(exception, Forbidden):
             return await ctx.send("The bot does not have access to send messages!")
