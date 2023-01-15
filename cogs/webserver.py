@@ -106,7 +106,7 @@ class RecieverWebServer:
                 self.bot.dispatch(
                     "youtube_subscription_confirmation", verify_token)
                 self.bot.log.info(
-                    f"[Youtube] subscription confirmed for {callback['display_name']}")
+                    f"[Youtube] Subscription confirmed for {callback['display_name']}")
                 return web.Response(text=challenge)
         return web.Response(status=404)
 
