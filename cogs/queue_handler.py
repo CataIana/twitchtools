@@ -1,3 +1,5 @@
+import asyncio
+from traceback import format_exc, format_exception
 from typing import TYPE_CHECKING, Union
 
 from disnake.ext import commands
@@ -8,6 +10,8 @@ from twitchtools import (PartialUser, PartialYoutubeUser, Stream, TitleEvent,
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
 
+    from .state_manager import StreamStateManager
+
 
 class QueueHandler(commands.Cog):
     def __init__(self, bot):
@@ -15,8 +19,17 @@ class QueueHandler(commands.Cog):
         super().__init__()
         # NEVER ASSIGN A TASK TO A VARIABLE AGAIN MYAAA.
         # Caused a bug that would cause this worker to get stuck with no errors
-        self.bot.loop.create_task(self.queue_handler())
-        self.status_cog = self.bot.get_cog("StreamStateManager")
+        self.bot.loop.create_task(self.ensure_queue())
+        self.status_cog: StreamStateManager = self.bot.get_cog("StreamStateManager")
+
+    async def ensure_queue(self):
+        while True:
+            self.queue_task = self.bot.loop.create_task(self.queue_handler())
+            try:
+                await asyncio.gather(self.queue_task, return_exceptions=False)
+            except Exception as e:
+                exc = ''.join(format_exception(type(e), e, e.__traceback__))
+                self.bot.log.error(f"Queue ran into an exception:\n{exc}")
 
     async def queue_handler(self):
         self.bot.log.debug("Queue Worker Started")
