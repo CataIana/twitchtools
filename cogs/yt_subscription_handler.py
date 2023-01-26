@@ -38,8 +38,7 @@ class YTSubscriptionHandler(commands.Cog, name="Youtube Subscription Handler"):
         # Minus a day plus 100 seconds, ensures that the subscription never expires
         timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
         await self.bot.db.write_yt_callback_expiration(channel, timestamp)
-        # self.bot.log.info(f"Resubscribed {channel.display_name}")
-        await sleep(0.25)
+        await sleep(1)
 
 
 def setup(bot):
