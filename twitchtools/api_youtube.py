@@ -49,7 +49,7 @@ class http_youtube:
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
-    async def get_user(self, user: PartialYoutubeUser = None, user_id: str = None, display_name: str = None, user_name: str = None) -> Optional[YoutubeUser]:
+    async def get_user(self, user: PartialYoutubeUser = None, user_id: str = None, display_name: str = None, user_name: str = None, handle: str = None) -> Optional[YoutubeUser]:
         if user is not None:
             r = await self._request(f"{self.base}/channels?id={user.id}&part=snippet")
         elif user_id is not None:
@@ -57,21 +57,28 @@ class http_youtube:
         elif user_name is not None:
             r = await self._request(f"{self.base}/channels?forUsername={user_name}&part=snippet")
         elif display_name is not None:
-            resp = await self.bot.aSession.get(f"https://youtube.com/{display_name}")
-            soup = BeautifulSoup(await resp.text(), 'html.parser')
-            try:
-                channel_id = soup.select_one('meta[property="og:url"]')[
-                    'content'].strip('/').split('/')[-1]
-            except TypeError:
-                return None
-            r = await self._request(f"{self.base}/channels?id={channel_id}&part=snippet")
+            r = await self.scrape_user(f"https://youtube.com/{display_name}")
+        elif handle is not None:
+            if not handle.startswith("@"):
+                handle = f"@{handle}"
+            r = await self.scrape_user(f"https://youtube.com/{handle}")
         else:
             raise BadRequest
-        j = await r.json()
-        if j.get("items", []) == []:
+        if r:
+            j = await r.json()
+            if j.get("items", []) == []:
+                return None
+            json_data = j["items"][0]
+            return YoutubeUser(**json_data)
+
+    async def scrape_user(self, url: str):
+        resp = await self.bot.aSession.get(url)
+        soup = BeautifulSoup(await resp.text(), 'html.parser')
+        try:
+            channel_id = soup.select_one('meta[property="og:url"]')['content'].strip('/').split('/')[-1]
+        except TypeError:
             return None
-        json_data = j["items"][0]
-        return YoutubeUser(**json_data)
+        return await self._request(f"{self.base}/channels?id={channel_id}&part=snippet")
 
     async def get_channel_upload_playlist_id(self, channel: PartialYoutubeUser) -> Optional[str]:
         r = await self._request(f"{self.base}/channels?id={channel.id}&part=contentDetails")

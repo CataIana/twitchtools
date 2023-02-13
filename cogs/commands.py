@@ -522,15 +522,18 @@ class CommandsCog(commands.Cog):
                             value=custom_live_message, inline=False)
         await ctx.send(embed=embed)
 
-    async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
+    async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_handle_or_display_name: str,
                                   notification_channel: TextChannel, mode: int, alert_role: Role = None,
                                   status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False):
 
         # Find account first
         # Assume display name first, saves an api request
-        channel = await self.bot.yapi.get_user(display_name=channel_id_or_display_name) or await self.bot.yapi.get_user(user_id=channel_id_or_display_name) or await self.bot.yapi.get_user(user_name=channel_id_or_display_name)
+        channel = (await self.bot.yapi.get_user(user_id=channel_id_or_handle_or_display_name)
+                   or await self.bot.yapi.get_user(handle=channel_id_or_handle_or_display_name) 
+                   or await self.bot.yapi.get_user(display_name=channel_id_or_handle_or_display_name)
+                   or await self.bot.yapi.get_user(user_name=channel_id_or_handle_or_display_name))
         if channel is None:
-            return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel")
+            return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel. You must provide either a channel ID (Starts with UC), a handle (starts with @) or a display name (somewhat unreliable)")
 
         # Run checks
         check_channel_permissions(ctx, channel=notification_channel)
