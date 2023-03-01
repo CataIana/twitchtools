@@ -31,7 +31,7 @@ class Stream:
         except KeyError:
             self.language: Languages = Languages.OTHER
         self.thumbnail_url: Thumbnail = Thumbnail(thumbnail_url)
-        self.tag_ids: list[str] = tag_ids
+        #self.tag_ids: list[str] = tag_ids # No longer returns anything
         self.tags: list[str] = tags
         self.is_mature: bool = bool(is_mature)
         self.origin: AlertOrigin = origin
