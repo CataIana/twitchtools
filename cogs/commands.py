@@ -1044,7 +1044,13 @@ class CommandsCog(commands.Cog):
         async for streamer, callback_info in self.bot.db.async_get_all_callbacks():
             await asyncio.sleep(0.2)
             if callback_info.get("online_id", None) is not None and callback_info.get("online_id", None) not in all_ids:
+                self.bot.log.info(f"Deleting subscriptions for {streamer.display_name}")
                 await self.bot.tapi.delete_subscription(callback_info["online_id"])
+            self.bot.log.info(f"Re-creating subscriptions for {streamer.display_name}")
+            if not callback_info.get("secret"):
+                self.bot.log.warning(f"Generating secret for {streamer.display_name} (This shouldn't be happening!)")
+                callback_info["secret"] = self.bot.random_string_generator(21)
+                await self.bot.db.write_callback(streamer, callback_info)
             rj1 = await self.bot.tapi.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callback_info["secret"], alert_type=AlertType.status)
             callback_info["online_id"] = rj1.id
             await asyncio.sleep(0.2)
