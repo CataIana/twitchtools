@@ -224,7 +224,8 @@ class http_twitch:
     async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
+        str_stream_id = str(stream_id)
         for vid in rj.get("data", []):
-            if int(vid['stream_id']) == stream_id:
+            if vid['stream_id'] == str_stream_id:
                 return Video(**vid)
         return None
