@@ -495,7 +495,7 @@ class StreamStateManager(commands.Cog):
                         self.bot.log.warning(
                             "Using fallback game extraction")
                         past_games = f"Was streaming {extracted_game} for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
-                    if callback.alert_roles[str(channel.guild.id)].get("show_cest_time", False):
+                    if callback.alert_roles.get(str(channel.guild.id), {}).get("show_cest_time", False):
                         cest_tz = tz.gettz("CET")
                         start_time_cest = embed.timestamp.astimezone(
                             cest_tz).strftime("%H:%M")
@@ -526,7 +526,7 @@ class StreamStateManager(commands.Cog):
                 embed.set_author(name=f"{channel.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                 video_end_time = await self.bot.yapi.has_video_ended(channel_cache.video_id)
                 end_time = parser.parse(video_end_time) if video_end_time else utcnow()
-                if callback["alert_roles"][str(c.guild.id)].get("show_cest_time", False):
+                if callback["alert_roles"].get(str(c.guild.id), {}).get("show_cest_time", False):
                     cest_tz = tz.gettz("CET")
                     start_time_cest = embed.timestamp.astimezone(
                         cest_tz).strftime("%H:%M")
