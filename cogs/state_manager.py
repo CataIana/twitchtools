@@ -216,7 +216,7 @@ class StreamStateManager(commands.Cog):
             if video.origin == AlertOrigin.catchup:
                 await self.update_youtube_title(video, channel_cache)
             elif video.origin == AlertOrigin.callback:
-                self.bot.log.info(f"[Twitch] Callback received for {video.user.display_name} while live, ignoring")
+                self.bot.log.info(f"[Youtube] Callback received for {video.user.display_name} while live, ignoring")
             return
 
         if on_cooldown:  # There is a 10 minute cooldown between alerts, but live channels will still be created
@@ -535,7 +535,7 @@ class StreamStateManager(commands.Cog):
                     detailed_length = f"\n{start_time_cest} - {end_time_cest}"
                 else:
                     detailed_length = ""
-                embed.description = f"Was streaming for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}{detailed_length}"
+                embed.description = f"Was streaming for {'~' if not video_end_time else ''}{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}{detailed_length}"
                 try:
                     await message.edit(content=f"{channel.display_name} is now offline", embed=embed)
                 except disnake.Forbidden:  # In case something weird happens
