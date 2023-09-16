@@ -369,42 +369,49 @@ class CommandsCog(commands.Cog):
     @streamers_add.sub_command(name="mode_zero", description="Dynamic notification + Temporary live status channel for a channel")
     async def streamers_add_mode_0(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
                                    notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
-                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts"),
+                                   title_match_phrase: str = None, show_cest_time: bool = None):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, mode=0)
+                custom_live_message=custom_live_message, title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=0)
         elif platform == PlatformChoice.Youtube:
             return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=0)
+                custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres,
+                 title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=0)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_one", description="Only sends a dynamic live notification for a live stream")
     async def streamers_add_mode_1(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
                                    notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
-                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts"),
+                                   title_match_phrase: str = None, show_cest_time: bool = None):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, mode=1)
+                custom_live_message=custom_live_message, title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=1)
         elif platform == PlatformChoice.Youtube:
             return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-            custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=1)
+            custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres,
+             title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=1)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_two", description="Dynamic live notification + Persistent text channel reporting channel live status")
     async def streamers_add_mode_2(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
                                    notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
-                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
+                                   allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts"),
+                                   title_match_phrase: str = None, show_cest_time: bool = None):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+                status_channel=status_channel, custom_live_message=custom_live_message, 
+                title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=2)
         elif platform == PlatformChoice.Youtube:
             return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, 
-                status_channel=status_channel, custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=2)
+                status_channel=status_channel, custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres,
+                title_match_phrase=title_match_phrase, show_cest_time=show_cest_time, mode=2)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     async def addstreamer_twitch(self, ctx: ApplicationCustomContext, streamer_username: str,
                                  notification_channel: TextChannel, mode: int, alert_role: Role = None,
-                                 status_channel: TextChannel = None, custom_live_message: str = None):
+                                 status_channel: TextChannel = None, custom_live_message: str = None, title_match_phrase: str = None, show_cest_time: bool = False):
         # Run checks on all the supplied arguments
         streamer = await self.bot.tapi.get_user(user_login=streamer_username)
         if not streamer:
@@ -475,6 +482,12 @@ class CommandsCog(commands.Cog):
         if custom_live_message:
             callback["alert_roles"][str(
                 ctx.guild.id)]["custom_message"] = custom_live_message
+        if title_match_phrase:
+            callback["alert_roles"][str(
+                ctx.guild.id)]["title_match_phrase"] = title_match_phrase.lower()
+        if show_cest_time:
+            callback["alert_roles"][str(
+                ctx.guild.id)]["show_cest_time"] = show_cest_time
 
         await self.bot.db.write_callback(streamer, callback)
 
@@ -520,11 +533,18 @@ class CommandsCog(commands.Cog):
         if custom_live_message:
             embed.add_field(name="Custom Alert Message",
                             value=custom_live_message, inline=False)
+        if title_match_phrase:
+            embed.add_field(name="Title Match Phrase",
+                            value=title_match_phrase, inline=True)
+        if show_cest_time:
+            embed.add_field(name="Show CET/CEST Time",
+                            value="Yes", inline=True)
         await ctx.send(embed=embed)
 
     async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_handle_or_display_name: str,
                                   notification_channel: TextChannel, mode: int, alert_role: Role = None,
-                                  status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False):
+                                  status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False,
+                                  title_match_phrase: str = None, show_cest_time: bool = False):
 
         # Find account first
         # Assume display name first, saves an api request
@@ -597,6 +617,12 @@ class CommandsCog(commands.Cog):
         if custom_live_message:
             callback["alert_roles"][str(
                 ctx.guild.id)]["custom_message"] = custom_live_message
+        if title_match_phrase:
+            callback["alert_roles"][str(
+                ctx.guild.id)]["title_match_phrase"] = title_match_phrase.lower()
+        if show_cest_time:
+            callback["alert_roles"][str(
+                ctx.guild.id)]["show_cest_time"] = show_cest_time
         if allow_youtube_premieres:
             callback["alert_roles"][str(
                 ctx.guild.id)]["enable_premieres"] = allow_youtube_premieres
@@ -641,6 +667,15 @@ class CommandsCog(commands.Cog):
         if custom_live_message:
             embed.add_field(name="Custom Alert Message",
                             value=custom_live_message, inline=False)
+        if title_match_phrase:
+            embed.add_field(name="Title Match Phrase",
+                            value=title_match_phrase, inline=True)
+        if show_cest_time:
+            embed.add_field(name="Show CET/CEST Time",
+                            value="Yes", inline=True)
+        if allow_youtube_premieres:
+            embed.add_field(name="Enable Premieres",
+                            value="Yes", inline=True)
         await ctx.send(embed=embed)
 
     @staticmethod
@@ -699,7 +734,7 @@ class CommandsCog(commands.Cog):
                 else:
                     premieres = ""
 
-                new_page_string = f"{truncate(alert_info['display_name'], 15):15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}{premieres}"
+                new_page_string = f"{truncate(alert_info['display_name'], 15):15s} {last_live:16s} {alert_role:25s} {channel_override:18s} {READABLE_MODES[info['mode']]}{premieres:33s} {info.get('title_match_phrase', ''):20s}"
 
                 # Add page
                 # Check if current page length + added string are near character limit. If so, start a new page.

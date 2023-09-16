@@ -28,7 +28,7 @@ class RecieverWebServer:
     async def start(self):
         runner = web.AppRunner(self.web_server)
         await runner.setup()
-        await web.TCPSite(runner, host="localhost", port=self.port).start()
+        await web.TCPSite(runner, host="0.0.0.0", port=self.port).start()
         self.bot.log.info(f"[Webserver] Running on localhost:{self.port}")
         return self.web_server
 

@@ -1,9 +1,10 @@
 from datetime import timedelta
 from time import time
+from math import floor
 from typing import TYPE_CHECKING, Union
 
 import disnake
-from dateutil import parser
+from dateutil import parser, tz
 from disnake.ext import commands
 from disnake.utils import utcnow
 
@@ -23,6 +24,7 @@ class StreamStateManager(commands.Cog):
         self.bot: TwitchCallBackBot = bot
         super().__init__()
         self.ignore_cooldowns: bool = False  # Used for debugging/development
+        self.footer_msg: str = "POGGIES"
 
     async def on_title_change(self, event: TitleEvent):
         await self.bot.wait_until_ready()
@@ -63,7 +65,7 @@ class StreamStateManager(commands.Cog):
             embed.add_field(name="New Game", value=event.game, inline=True)
         embed.set_author(name=f"{event.broadcaster.display_name} updated their {' and '.join(updated)}!",
                          url=f"https://twitch.tv/{event.broadcaster.username}", icon_url=user.avatar)
-        embed.set_footer(text="Mew")
+        embed.set_footer(text=self.footer_msg)
 
         self.bot.log.info(f"[Twitch] {event.broadcaster.username} => TITLE UPDATE")
 
@@ -95,7 +97,7 @@ class StreamStateManager(commands.Cog):
         self.bot.log.info(f"[Twitch]{self.is_catchup(streamer)} {streamer.display_name} => OFFLINE")
 
         await self.set_channels_offline(callback, channel_cache)
-        await self.set_twitch_alerts_offline(streamer, channel_cache)
+        await self.set_twitch_alerts_offline(streamer, callback, channel_cache)
 
         channel_cache.pop("live_channels", None)
         if channel_cache.get("live_alerts", []) != []:
@@ -105,6 +107,8 @@ class StreamStateManager(commands.Cog):
         channel_cache.is_live = False
         channel_cache.pop("games", None)
         channel_cache.pop("last_update", None)
+        channel_cache.pop("viewer_milestone", None)
+        channel_cache.pop("triggered_guilds", None)
 
         # Update cache
         await self.bot.db.write_channel_cache(streamer, channel_cache)
@@ -119,7 +123,7 @@ class StreamStateManager(commands.Cog):
         if not self.is_live(channel_cache): return
         self.bot.log.info(f"[Youtube]{self.is_catchup(channel)} {channel.display_name} => OFFLINE")
         await self.set_channels_offline(callback, channel_cache)
-        await self.set_youtube_alerts_offline(channel, channel_cache)
+        await self.set_youtube_alerts_offline(channel, callback, channel_cache)
 
         channel_cache.pop("live_channels", None)
         if channel_cache.get("live_alerts", []) != []:
@@ -128,6 +132,7 @@ class StreamStateManager(commands.Cog):
         channel_cache.pop("video_id", None)
         channel_cache.is_live = False
         channel_cache.pop("last_update", None)
+        channel_cache.pop("triggered_guilds", None)
 
         # Update cache
         await self.bot.db.write_yt_channel_cache(channel, channel_cache)
@@ -144,12 +149,20 @@ class StreamStateManager(commands.Cog):
         if self.is_live(channel_cache):
             if stream.origin == AlertOrigin.callback:
                 self.bot.log.info(f"[Twitch] Callback received for {stream.user.display_name} while live, ignoring")
+            elif stream.origin == AlertOrigin.catchup:
+                await self.viewer_count_milestones(stream, callback, channel_cache)
+            # Remove this return so that title phrase matching can run
+            # return
+
+        else:
+            if on_cooldown:  # There is a 10 minute cooldown between alerts, but live channels will still be created
+                self.bot.log.info(f"[Twitch] Notification cooldown active for {stream.user.display_name}, restoring old channels/messages")
+
+            self.bot.log.info(f"[Twitch]{self.is_catchup(stream)} {stream.user.display_name} => ONLINE")
+
+        # If no guilds left to recheck, just return
+        if [k for k in callback.alert_roles.keys() if k not in channel_cache.get("triggered_guilds", [])] == []:
             return
-
-        if on_cooldown:  # There is a 10 minute cooldown between alerts, but live channels will still be created
-            self.bot.log.info(f"[Twitch] Notification cooldown active for {stream.user.display_name}, restoring old channels/messages")
-
-        self.bot.log.info(f"[Twitch]{self.is_catchup(stream)} {stream.user.display_name} => ONLINE")
 
         # Update cached display name
         if callback.display_name != stream.user.display_name:
@@ -160,19 +173,28 @@ class StreamStateManager(commands.Cog):
         stream.user = await self.bot.tapi.get_user(user=stream.user)
         embed = self.get_stream_embed(stream)
 
-        live_channels, live_alerts = await self.send_live_alerts_and_channels(stream, embed, callback, channel_cache)
+        live_channels, live_alerts, triggered_guilds = await self.send_live_alerts_and_channels(stream, embed, callback, channel_cache)
 
-        # Finally, combine all data into channel cache, and update the file
-        channel_cache = {
-            "alert_cooldown": int(time()),
-            "user_login": stream.user.username,
-            "stream_id": stream.stream_id,
-            "is_live": True,
-            "live_channels": live_channels,
-            "live_alerts": live_alerts,
-            "last_update": int(time()),
-            "games": {stream.game_name: 0}
-        }
+        if not channel_cache.get("is_live", False):
+            # Finally, combine all data into channel cache, and update the file
+            channel_cache = {
+                "alert_cooldown": int(time()),
+                "user_login": stream.user.username,
+                "stream_id": stream.stream_id,
+                "is_live": True,
+                "live_channels": live_channels,
+                "live_alerts": live_alerts,
+                "last_update": int(time()),
+                "games": {stream.game_name: 0},
+                "triggered_guilds": triggered_guilds
+            }
+        else:
+            channel_cache["triggered_guilds"] = list(set(triggered_guilds + channel_cache["triggered_guilds"]))
+            channel_cache["live_channels"] = list(set(live_channels + channel_cache["live_channels"]))
+            msgs = [a["message"] for a in channel_cache["live_alerts"]]
+            for alert in live_alerts:
+                if alert["message"] not in msgs:
+                    channel_cache["live_alerts"].append(alert)
 
         # await write_channel_cache(channel_cache)
         await self.bot.db.write_channel_cache(stream.user, channel_cache)
@@ -211,24 +233,33 @@ class StreamStateManager(commands.Cog):
         video.user = await self.bot.yapi.get_user(video.user)
         embed = self.get_stream_embed(video)
 
-        live_channels, live_alerts = await self.send_live_alerts_and_channels(video, embed, callback, channel_cache)
+        live_channels, live_alerts, triggered_guilds = await self.send_live_alerts_and_channels(video, embed, callback, channel_cache)
 
-        # Finally, combine all data into channel cache, and update the file
-        channel_cache = {
-            "alert_cooldown": int(time()),
-            "channel_id": video.channel.id,
-            "video_id": video.id,
-            "is_live": True,
-            "live_channels": live_channels,
-            "live_alerts": live_alerts,
-            "last_update": int(time())
-        }
+        if not channel_cache.get("is_live", False):
+            # Finally, combine all data into channel cache, and update the file
+            channel_cache = {
+                "alert_cooldown": int(time()),
+                "channel_id": video.channel.id,
+                "video_id": video.id,
+                "is_live": True,
+                "live_channels": live_channels,
+                "live_alerts": live_alerts,
+                "last_update": int(time()),
+                "triggered_guilds": triggered_guilds
+            }
+        else:
+            channel_cache["triggered_guilds"] = list(set(triggered_guilds + channel_cache["triggered_guilds"]))
+            channel_cache["live_channels"] = list(set(live_channels + channel_cache["live_channels"]))
+            msgs = [a["message"] for a in channel_cache["live_alerts"]]
+            for alert in live_alerts:
+                if alert["message"] not in msgs:
+                    channel_cache["live_alerts"].append(alert)
 
         # await write_channel_cache(channel_cache)
         await self.bot.db.write_yt_channel_cache(video.user, channel_cache)
 
     def on_cooldown(self, alert_cooldown: int) -> bool:
-        if int(time()) - alert_cooldown < 600 and not self.ignore_cooldowns:
+        if int(time()) - alert_cooldown < 1800 and not self.ignore_cooldowns:
             return True
         return False
 
@@ -237,17 +268,23 @@ class StreamStateManager(commands.Cog):
         if channel_cache.get("is_live", False):
             return True
 
-    async def send_live_alerts_and_channels(self, item: Union[Stream, YoutubeVideo], embed: disnake.Embed, callback: Union[Callback, YoutubeCallback], channel_cache: Union[ChannelCache, YoutubeChannelCache]) -> tuple[list, list]:
+    async def send_live_alerts_and_channels(self, item: Union[Stream, YoutubeVideo], embed: disnake.Embed, callback: Union[Callback, YoutubeCallback], channel_cache: Union[ChannelCache, YoutubeChannelCache]) -> tuple[list, list, list]:
         SelfOverride, DefaultRole, OverrideRole = self.get_overwrites()
         on_cooldown = self.on_cooldown(channel_cache.get("alert_cooldown", 0))
 
         live_channels = []
         live_alerts = []
+        triggered_guilds = []
         reuse_done = False
-        for guild_id, alert_info in callback.alert_roles.items():
+        for guild_id, alert_info in {k: v for k, v in callback.alert_roles.items() if k not in channel_cache.get("triggered_guilds", [])}.items():
             guild = self.bot.get_guild(int(guild_id))
             if guild is None:
                 continue
+
+            if alert_info.get("title_match_phrase", None):
+                if alert_info.title_match_phrase not in item.title.lower():
+                    self.bot.log.info(f"{item.user.display_name} title phrase for {guild.name} didn't match, skipping alert")
+                    continue
 
             user_escaped = item.user.display_name.replace('_', '\_')
 
@@ -289,6 +326,11 @@ class StreamStateManager(commands.Cog):
                         alert_channel_id = alert.get("channel", None)
                         alert_channel = self.bot.get_channel(alert_channel_id)
                         if alert_channel is not None:
+                            if callback.alert_roles[str(alert_channel.guild.id)].get("title_match_phrase", None):
+                                if callback.alert_roles[str(alert_channel.guild.id)].title_match_phrase not in item.title.lower():
+                                    self.bot.log.info(
+                                        f"Didn't match title phrase for {guild.name}, skipping alert")
+                                    continue
                             try:
                                 alert_message = await alert_channel.fetch_message(alert.get("message"))
                             except disnake.NotFound:
@@ -346,7 +388,8 @@ class StreamStateManager(commands.Cog):
                     else:
                         self.bot.log.warning(
                             f"Persistent channel not found for {item.user.display_name}")
-        return live_channels, live_alerts
+            triggered_guilds.append(guild_id)
+        return live_channels, live_alerts, triggered_guilds
 
     async def update_youtube_title(self, video: YoutubeVideo, channel_cache: YoutubeChannelCache):
         if video.id == channel_cache.video_id:
@@ -403,7 +446,7 @@ class StreamStateManager(commands.Cog):
                 except disnake.HTTPException:
                     continue
 
-    async def set_twitch_alerts_offline(self, streamer: User, channel_cache: ChannelCache):
+    async def set_twitch_alerts_offline(self, streamer: User, callback: Callback, channel_cache: ChannelCache):
         """Just like channels, iterate through the sent live alerts, and make them past tense."""
         # Find a vod to make the embed link to
         vod = None
@@ -452,13 +495,22 @@ class StreamStateManager(commands.Cog):
                         self.bot.log.warning(
                             "Using fallback game extraction")
                         past_games = f"Was streaming {extracted_game} for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
-                    embed.description = past_games
+                    if callback.alert_roles[str(channel.guild.id)].get("show_cest_time", False):
+                        cest_tz = tz.gettz("CET")
+                        start_time_cest = embed.timestamp.astimezone(
+                            cest_tz).strftime("%H:%M")
+                        end_time_cest = end_time.astimezone(
+                            cest_tz).strftime("%H:%M %Z")
+                        detailed_length = f"\n{start_time_cest} - {end_time_cest}"
+                    else:
+                        detailed_length = ""
+                    embed.description = f"{past_games}{detailed_length}"
                     try:
                         await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
                     except disnake.Forbidden:
                         continue
 
-    async def set_youtube_alerts_offline(self, channel: YoutubeUser, channel_cache: YoutubeChannelCache):
+    async def set_youtube_alerts_offline(self, channel: YoutubeUser, callback: Callback, channel_cache: YoutubeChannelCache):
         """Just like channels, iterate through the sent live alerts, and make them past tense."""
         for alert_ids in channel_cache.get("live_alerts", []):
             if c := self.bot.get_channel(alert_ids["channel"]):
@@ -474,7 +526,16 @@ class StreamStateManager(commands.Cog):
                 embed.set_author(name=f"{channel.display_name} is now offline", url=embed.author.url, icon_url=embed.author.icon_url)
                 video_end_time = await self.bot.yapi.has_video_ended(channel_cache.video_id)
                 end_time = parser.parse(video_end_time) if video_end_time else utcnow()
-                embed.description = f"Was streaming for {'~' if not video_end_time else ''}{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
+                if callback["alert_roles"][str(c.guild.id)].get("show_cest_time", False):
+                    cest_tz = tz.gettz("CET")
+                    start_time_cest = embed.timestamp.astimezone(
+                        cest_tz).strftime("%H:%M")
+                    end_time_cest = end_time.astimezone(
+                        cest_tz).strftime("%H:%M %Z")
+                    detailed_length = f"\n{start_time_cest} - {end_time_cest}"
+                else:
+                    detailed_length = ""
+                embed.description = f"Was streaming for {'~' if not video_end_time else ''}{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}{detailed_length}"
                 try:
                     await message.edit(content=f"{channel.display_name} is now offline", embed=embed)
                 except disnake.Forbidden:  # In case something weird happens
@@ -505,7 +566,7 @@ class StreamStateManager(commands.Cog):
             embed.set_author(name=f"{item.user.display_name} is now live on Youtube!",
                              url=f"https://youtube.com/watch?v={item.id}", icon_url=item.user.avatar_url)
         
-        embed.set_footer(text="Mew")
+        embed.set_footer(text=self.footer_msg)
         return embed
     
     async def title_change_update_alerts(self, event: TitleEvent, stream: Stream, old_game: str):
@@ -527,6 +588,57 @@ class StreamStateManager(commands.Cog):
             channel_cache.games[event.game_name] = old_time
             channel_cache.last_update = int(time())
             await self.bot.db.write_channel_cache(stream.user, channel_cache)
+
+    async def viewer_count_milestones(self, stream: Stream, callback: Callback, channel_cache: ChannelCache):
+        # Check if view count is higher than minimum and if it exceeds a previous announcement + interval amount
+        if stream.view_count >= self.bot.viewer_milestones_minimum and stream.view_count >= channel_cache.get("viewer_milestone", 0)+self.bot.viewer_milestones_interval:
+            self.bot.log.info(
+                f"{stream.user.username} => VIEW COUNT ({stream.view_count:,}) (Twitch)")
+            # Do some funky maths to calculate the interval that it passed
+            channel_cache.viewer_milestone = floor((stream.view_count-self.bot.viewer_milestones_minimum) /
+                                                        self.bot.viewer_milestones_interval)*self.bot.viewer_milestones_interval+self.bot.viewer_milestones_minimum
+            await self.bot.db.write_channel_cache(stream.user, channel_cache)
+
+            # Create embed message
+            stream.user = await self.bot.tapi.get_user(user=stream.user)
+            view_embed = disnake.Embed(
+                title=f"{stream.user.display_name} just passed {channel_cache.get('viewer_milestone', 0):,} viewers!", url=f"https://twitch.tv/{stream.user.name}",
+                description=f"Streaming {stream.game} for {human_timedelta(stream.started_at, suffix=False, accuracy=2)}\n[Watch Stream](https://twitch.tv/{stream.user.name})",
+                colour=TWITCH_PURPLE, timestamp=utcnow())
+            view_embed.set_author(
+                name=stream.title, url=f"https://twitch.tv/{stream.user.name}", icon_url=stream.user.avatar)
+            # This got stuck when combined. Not sure why
+            view_embed.set_footer(text=self.footer_msg)
+
+            for guild_id, alert_info in callback.alert_roles.items():
+                guild = self.bot.get_guild(int(guild_id))
+                if guild is None:
+                    continue
+
+                if alert_info.get("title_match_phrase", None):
+                    if alert_info.title_match_phrase not in stream.title.lower():
+                        self.bot.log.info(
+                            f"[Twitch] {stream.user.display_name} title phrase for {guild.name} didn't match, skipping alert")
+                        continue
+
+                #Format role mention
+                if alert_info.role_id == "everyone":
+                    role_mention = f" {guild.default_role}"
+                elif alert_info.role_id == None:
+                    role_mention = ""
+                else:
+                    role = guild.get_role(alert_info.role_id)
+                    role_mention = f" {getattr(role, 'mention', '')}"
+
+                if alert_channel := self.bot.get_channel(alert_info.get("notif_channel_id", None)):
+                    try:
+                        #live_alert = await alert_channel.send(f"{stream.user.display_name} is live on Twitch!{role_mention}", embed=embed)
+                        user_escaped = stream.user.display_name.replace('_', '\_')
+                        await alert_channel.send(f"{user_escaped} just passed {channel_cache.get('viewer_milestone', 0):,} viewers!{role_mention}", embed=view_embed)
+                    except disnake.Forbidden:
+                        pass
+                    except disnake.HTTPException:
+                        pass
 
 def setup(bot):
     bot.add_cog(StreamStateManager(bot))

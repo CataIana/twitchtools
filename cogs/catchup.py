@@ -23,7 +23,7 @@ class Catchup(commands.Cog):
         self.twitch_backup_checks.cancel()
         self.youtube_backup_checks.cancel()
 
-    @tasks.loop(seconds=1800)
+    @tasks.loop(seconds=120)
     async def twitch_backup_checks(self):
         await self.twitch_catchup()
         self.bot.log.debug("Ran twitch catchup")
