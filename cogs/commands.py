@@ -11,7 +11,6 @@ from types import BuiltinFunctionType, CoroutineType, FunctionType, MethodType
 
 import disnake
 import psutil
-from dateutil import parser, tz
 from disnake import Embed, Role, TextChannel
 from disnake.ext import commands
 from disnake.utils import utcnow
@@ -22,9 +21,10 @@ from twitchtools import (AlertOrigin, AlertType, ApplicationCustomContext,
                          Callback, Confirm, PartialUser, PartialYoutubeUser,
                          PlatformChoice, SortableTextPaginator,
                          SubscriptionError, SubscriptionType, TextPaginator,
-                         User, YoutubeCallback, YoutubeSubscription,
-                         YoutubeUser, has_guild_permissions,
-                         has_manage_permissions, human_timedelta, check_channel_permissions)
+                         User, UserType, YoutubeCallback, YoutubeSubscription,
+                         YoutubeUser, check_channel_permissions,
+                         has_guild_permissions, has_manage_permissions,
+                         human_timedelta)
 
 LEASE_SECONDS = 828000
 
@@ -541,16 +541,19 @@ class CommandsCog(commands.Cog):
                             value="Yes", inline=True)
         await ctx.send(embed=embed)
 
-    async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str,
+    async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_handle_or_display_name: str,
                                   notification_channel: TextChannel, mode: int, alert_role: Role = None,
                                   status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False,
                                   title_match_phrase: str = None, show_cest_time: bool = False):
 
         # Find account first
         # Assume display name first, saves an api request
-        channel = await self.bot.yapi.get_user(display_name=channel_id_or_display_name) or await self.bot.yapi.get_user(user_id=channel_id_or_display_name) or await self.bot.yapi.get_user(user_name=channel_id_or_display_name)
+        channel = (await self.bot.yapi.get_user(user_id=channel_id_or_handle_or_display_name)
+                   or await self.bot.yapi.get_user(handle=channel_id_or_handle_or_display_name) 
+                   or await self.bot.yapi.get_user(display_name=channel_id_or_handle_or_display_name)
+                   or await self.bot.yapi.get_user(user_name=channel_id_or_handle_or_display_name))
         if channel is None:
-            return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel")
+            return await ctx.send(f"{self.bot.emotes.error} Failed to locate channel. You must provide either a channel ID (Starts with UC), a handle (starts with @) or a display name (somewhat unreliable)")
 
         # Run checks
         check_channel_permissions(ctx, channel=notification_channel)
@@ -1076,7 +1079,13 @@ class CommandsCog(commands.Cog):
         async for streamer, callback_info in self.bot.db.async_get_all_callbacks():
             await asyncio.sleep(0.2)
             if callback_info.get("online_id", None) is not None and callback_info.get("online_id", None) not in all_ids:
+                self.bot.log.info(f"Deleting subscriptions for {streamer.display_name}")
                 await self.bot.tapi.delete_subscription(callback_info["online_id"])
+            self.bot.log.info(f"Re-creating subscriptions for {streamer.display_name}")
+            if not callback_info.get("secret"):
+                self.bot.log.warning(f"Generating secret for {streamer.display_name} (This shouldn't be happening!)")
+                callback_info["secret"] = self.bot.random_string_generator(21)
+                await self.bot.db.write_callback(streamer, callback_info)
             rj1 = await self.bot.tapi.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callback_info["secret"], alert_type=AlertType.status)
             callback_info["online_id"] = rj1.id
             await asyncio.sleep(0.2)
@@ -1105,6 +1114,65 @@ class CommandsCog(commands.Cog):
             await asyncio.sleep(0.25)
 
         await ctx.send(f"{self.bot.emotes.success} Recreated live subscriptions!")
+
+    @commands.slash_command(description="Get a youtube user/channel from their various unique identification. Only one option is required")
+    async def getyoutubeuser(self, ctx: ApplicationCustomContext,
+                             user_id: str = commands.Param(default=None, description="A string of randomly generated characters, like UCV6mNrW8CrmWtcxWfQXy11g."),
+                             handle: str = commands.Param(default=None, description="Youtube's new username system, they typically start with an @"),
+                             display_name: str = commands.Param(default=None, description="The actual name of a channel"),
+                             username: str = commands.Param(default=None, description="Youtube's legacy system for usernames, only old channels have these")):
+        if user_id:
+            user = await self.bot.yapi.get_user(user_id=user_id)
+        elif handle:
+            user = await self.bot.yapi.get_user(handle=handle)
+        elif display_name:
+            user = await self.bot.yapi.get_user(display_name=display_name)
+        elif username:
+            user = await self.bot.yapi.get_user(username=username)
+        else:
+            return await ctx.send(f"{self.bot.emotes.error} You must enter one of the options!")
+
+        embed = Embed(title="Youtube User Info",
+                      timestamp=utcnow(), colour=self.bot.colour)
+        embed.set_author(name=user.display_name, icon_url=user.avatar_url)
+        embed.add_field(name="Display Name", value=user.display_name)
+        embed.add_field(name="Channel ID", value=user.id)
+        embed.add_field(name="Channel Description", value=user.description, inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.slash_command(description="Fetches information on a twitch user. Only one option is required")
+    async def gettwitchuser(self, ctx: ApplicationCustomContext,
+                            username: str = commands.Param(default=None, description="A channels unique username"),
+                            user_id: str = commands.Param(default=None, description="A channels randomly generate ID")):
+        if username:
+            user = await self.bot.tapi.get_user(user_login=username)
+        elif user_id:
+            user = await self.bot.tapi.get_user(user_id=user_id)
+        else:
+            return await ctx.send(f"{self.bot.emotes.error} You must enter one of the options!")
+        if user is None:
+            return await ctx.send(f"{self.bot.emotes.error} Could not find twitch user \"{username or user_id}\"")
+        follow_count = await self.bot.tapi.get_user_follow_count(user)
+
+        # Chat colour: colour=int(hex(int((json["chatColor"] or "#000000").replace("#", ""), 16)), 0)
+        embed = Embed(title="Twitch User Info",
+                      timestamp=utcnow(), colour=self.bot.colour)
+        embed.set_author(
+            name=user.display_name, icon_url=user.avatar)
+        embed.set_thumbnail(url=user.avatar)
+        embed.add_field(name="Username", value=user.username)
+        embed.add_field(name="Display Name", value=user.display_name)
+        embed.add_field(name="ID", value=user.id)
+        embed.add_field(name="Account Created",
+                        value=f"{DiscordTimezone(user.created_at.timestamp(), TimestampOptions.long_date_short_time)} ({human_timedelta(user.created_at, accuracy=3)})", inline=False)
+        embed.add_field(name="Bio", value=user.description, inline=False)
+        embed.add_field(name="Follow Count", value=follow_count)
+        if user.view_count != 0:
+            embed.add_field(name="View Count", value=user.view_count)
+        embed.add_field(name="Broadcaster Type", value=user.broadcaster_type.name.title())
+        if user.type != UserType.none:
+            embed.add_field(name="User Type", value=user.type.name.title())
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

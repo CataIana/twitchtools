@@ -101,6 +101,16 @@ class http_twitch:
             return None
         json_data = j["data"][0]
         return User(**json_data)
+    
+    async def get_user_follow_count(self, user: PartialUser = None, user_id: int = None) -> Optional[str]:
+        if user is not None:
+            r = await self._request(f"{self.base}/users/follows?to_id={user.id}")
+        elif user_id is not None:
+            r = await self._request(f"{self.base}/users/follows?to_id={user_id}")
+        else:
+            raise BadRequest
+        j = await r.json()
+        return j.get("total", None)
 
     async def get_streams(self, users: List[Union[User, PartialUser]] = [], user_ids: List[int] = [], user_logins: List[str] = [], origin: AlertOrigin = AlertOrigin.unavailable) -> List[Stream]:
         queries = []
@@ -214,7 +224,8 @@ class http_twitch:
     async def get_video_from_stream_id(self, user: Union[User, PartialUser], stream_id: int) -> Optional[Video]:
         r = await self._request(f"{self.base}/videos?user_id={user.id}")
         rj = await r.json()
+        str_stream_id = str(stream_id)
         for vid in rj.get("data", []):
-            if int(vid['stream_id']) == stream_id:
+            if vid['stream_id'] == str_stream_id:
                 return Video(**vid)
         return None
