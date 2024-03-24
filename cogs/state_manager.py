@@ -435,16 +435,26 @@ class StreamStateManager(commands.Cog):
                                     f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Title phrase for slack webhook {item.user.display_name} didn't match, skipping alert")
                                 continue
                         if webhook not in channel_cache.get("triggered_guilds", []):
-                            try:
                                 if webhook.startswith("https://hooks.slack.com"):
-                                    await self.bot.aSession.post(webhook, data={"text": message}, headers={"Content-type": "application/json"})
+                                    try:
+                                        r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
+                                        rb = (await r.read()).decode()
+                                        if r.status == 200 and rb == 'ok':
+                                            self.bot.log.info(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Sent slack online webhook for {item.user.display_name}")
+                                            triggered_guilds.append(webhook)
+                                        else:
+                                            self.bot.log.error(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Error sending slack online webhook for {item.user.display_name}: {rb}")
+                                    except client_exceptions.ClientError as e:
+                                        self.bot.log.error(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Error sending slack online webhook for {item.user.display_name}: {str(e)}")
                                 elif webhook.startswith("https://discord.com/api/webhooks"):
                                     hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
-                                    await hook.send(message)
-                                self.bot.log.info(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Sent slack online webhook for {item.user.display_name}")
-                                triggered_guilds.append(webhook)
-                            except client_exceptions.ClientError as e:
-                                self.bot.log.error(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Error sending slack online webhook for {item.user.display_name}: {str(e)}")
+                                    try:
+                                        await hook.send(message)
+                                        triggered_guilds.append(webhook)
+                                    except (disnake.errors.NotFound, disnake.errors.Forbidden, disnake.errors.HTTPException) as e:
+                                        self.bot.log.error(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Error sending discord online webhook for {item.user.display_name}: {str(e)}")
+                                    else:
+                                        self.bot.log.info(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Sent discord online webhook for {item.user.display_name}")
 
             except FileNotFoundError:
                 pass
@@ -592,15 +602,24 @@ class StreamStateManager(commands.Cog):
 
                 for webhook in webhooks_info["webhooks"]:
                     if webhook in channel_cache["triggered_guilds"]:
-                        try:
-                            if webhook.startswith("https://hooks.slack.com"):
-                                await self.bot.aSession.post(webhook, data={"text": message}, headers={"Content-type": "application/json"})
-                            elif webhook.startswith("https://discord.com/api/webhooks"):
-                                hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
+                        if webhook.startswith("https://hooks.slack.com"):
+                            try:
+                                r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
+                                rb = (await r.read()).decode()
+                                if r.status == 200 and rb == 'ok':
+                                    self.bot.log.info(f"[Twitch] Sent slack online webhook for {streamer.display_name}")
+                                else:
+                                    self.bot.log.error(f"[Twitch] Error sending slack online webhook for {streamer.display_name}: {rb}")
+                            except client_exceptions.ClientError as e:
+                                self.bot.log.error(f"[Twitch] Error sending slack online webhook for {streamer.display_name}: {str(e)}")
+                        elif webhook.startswith("https://discord.com/api/webhooks"):
+                            hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
+                            try:
                                 await hook.send(message)
-                            self.bot.log.info(f"[Twitch] Sent slack twitch offline webhook for {streamer.display_name}")
-                        except client_exceptions.ClientError as e:
-                            self.bot.log.error(f"[Twitch] Error sending slack twitch offline webhook for {streamer.display_name}: {str(e)}")
+                            except (disnake.errors.NotFound, disnake.errors.Forbidden, disnake.errors.HTTPException) as e:
+                                self.bot.log.error(f"[Twitch] Error sending discord offline webhook for {streamer.display_name}: {str(e)}")
+                            else:
+                                self.bot.log.info(f"[Twitch] Sent discord offline webhook for {streamer.display_name}")
 
         except FileNotFoundError:
             pass
@@ -641,23 +660,32 @@ class StreamStateManager(commands.Cog):
 
         try:
             async with aiofiles.open("config/callbacks.yml") as c:
-                callback_yaml = load(await c.read(), loader=Loader)
+                callback_yaml = load(await c.read(), Loader=Loader)
 
             if webhooks_info := callback_yaml.get("callbacks", {}).get(channel.id):
                 user_escaped = channel.display_name.replace('_', '\_')
-                message = f"{user_escaped} is no longer live on Youtube"
+                message = f"{user_escaped} is no longer live on Youtube\nhttps://youtube.com/watch?v={channel_cache.video_id}"
 
                 for webhook in webhooks_info["webhooks"]:
                     if webhook in channel_cache["triggered_guilds"]:
-                        try:
-                            if webhook.startswith("https://hooks.slack.com"):
-                                await self.bot.aSession.post(webhook, data={"text": message}, headers={"Content-type": "application/json"})
-                            elif webhook.startswith("https://discord.com/api/webhooks"):
-                                hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
+                        if webhook.startswith("https://hooks.slack.com"):
+                            try:
+                                r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
+                                rb = (await r.read()).decode()
+                                if r.status == 200 and rb == 'ok':
+                                    self.bot.log.info(f"[Youtube] Sent slack online webhook for {channel.display_name}")
+                                else:
+                                    self.bot.log.error(f"[Youtube] Error sending slack online webhook for {channel.display_name}: {rb}")
+                            except client_exceptions.ClientError as e:
+                                self.bot.log.error(f"[Youtube] Error sending slack online webhook for {channel.display_name}: {str(e)}")
+                        elif webhook.startswith("https://discord.com/api/webhooks"):
+                            hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
+                            try:
                                 await hook.send(message)
-                            self.bot.log.info(f"[Youtube] Sent slack youtube offline webhook for {channel.display_name}")
-                        except client_exceptions.ClientError as e:
-                            self.bot.log.error(f"[Youtube] Error sending slack youtube offline webhook for {channel.display_name}: {str(e)}")
+                            except (disnake.errors.NotFound, disnake.errors.Forbidden, disnake.errors.HTTPException) as e:
+                                self.bot.log.error(f"[Youtube] Error sending discord offline webhook for {channel.display_name}: {str(e)}")
+                            else:
+                                self.bot.log.info(f"[Youtube] Sent discord offline webhook for {channel.display_name}")
 
         except FileNotFoundError:
             pass
