@@ -597,14 +597,14 @@ class StreamStateManager(commands.Cog):
                 callback_yaml = load(await c.read(), Loader=Loader)
 
             if webhooks_info := callback_yaml.get("callbacks", {}).get(streamer.id):
-                if vod:
-                    message += "\n"
-                    message += f"{vod.url}"
 
                 for webhook in webhooks_info["webhooks"]:
                     if webhook in channel_cache["triggered_guilds"]:
                         if webhook.startswith("https://hooks.slack.com"):
                             message = f"{streamer.display_name} is no longer live on Twitch"
+                            if vod:
+                                message += "\n"
+                                message += f"{vod.url}"
                             try:
                                 r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
                                 rb = (await r.read()).decode()
@@ -617,6 +617,9 @@ class StreamStateManager(commands.Cog):
                         elif webhook.startswith("https://discord.com/api/webhooks"):
                             user_escaped = streamer.display_name.replace('_', '\_')
                             message = f"{user_escaped} is no longer live on Twitch"
+                            if vod:
+                                message += "\n"
+                                message += f"{vod.url}"
                             hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                             try:
                                 await hook.send(message)
