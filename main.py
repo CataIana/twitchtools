@@ -51,6 +51,25 @@ class TwitchCallBackBot(commands.InteractionBot):
             raise BadAuthorization
         except json.decoder.JSONDecodeError:
             raise BadAuthorization
+        
+        # config_dir = os.listdir("config")
+        # if "auth.json" in config_dir:
+        #     config_file = "auth.json"
+        # elif "auth.yml" in config_dir:
+        #     config_file = "auth.yml"
+        # elif "auth.yaml" in config_dir:
+        #     config_file = "auth.yaml"
+        # try:
+        #     if config_file.endswith(".json"):
+        #         with open(config_file) as f:
+        #             config = json.load(f)
+        #     else:
+        #         # Parse yaml?
+        #         pass
+        # except FileNotFoundError:
+        #     raise BadAuthorization
+        # except json.decoder.JSONDecodeError:
+        #     raise BadAuthorization
 
         self.web_server = RecieverWebServer(
             self, port=config["webserver_port"])

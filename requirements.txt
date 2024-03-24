@@ -8,3 +8,4 @@ munch
 motor
 bs4
 lxml
+pyyaml

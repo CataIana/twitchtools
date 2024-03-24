@@ -251,7 +251,7 @@ class http_youtube:
                             item["liveStreamingDetails"], video_type=video_type, origin=origin)
 
     async def parse_video_xml(self, channel: PartialYoutubeUser, request_content: str) -> Optional[YoutubeVideo]:
-        soup = BeautifulSoup(request_content, "lxml")
+        soup = BeautifulSoup(request_content, features="xml")
 
         display_name = soup.find_all('name')[0].text
         try:
@@ -317,7 +317,7 @@ class http_youtube:
         for channel in channels:
             callback = await self.bot.db.get_yt_callback(channel)
             r = await self.bot.aSession.get(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel.id}")
-            soup = BeautifulSoup(await r.read(), "lxml")
+            soup = BeautifulSoup(await r.read(), features="xml")
             # Read the most recent 2 entries and extract the video IDs
             ids_search = soup.find_all("yt:videoid")
             ids_dict[channel] = [id.text for id in ids_search]

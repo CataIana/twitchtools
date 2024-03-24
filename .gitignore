@@ -1,5 +1,10 @@
 __pycache__
 auth.json
+auth.yml
+auth.yaml
+callbacks.yml
+callbacks.yaml
 emote_sync.json
 *.log
 test.py
+venv/
