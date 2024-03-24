@@ -422,12 +422,6 @@ class StreamStateManager(commands.Cog):
                     callback_yaml = load(await c.read(), Loader=Loader)
 
                 if webhooks_info := callback_yaml.get("callbacks", {}).get(item.user.id):
-                    user_escaped = item.user.display_name.replace('_', '\_')
-                    if isinstance(item, YoutubeVideo):
-                        message = f"{user_escaped} is live on Youtube!\n{item.title}\nhttps://youtube.com/watch?v={item.id}"
-                    else:
-                        message = f"{user_escaped} is live on Twitch!\n{item.title}\nhttps://twitch.tv/{item.user.username}"
-
                     for webhook in webhooks_info["webhooks"]:
                         if webhooks_info.get("title_match_phrase", None):
                             if webhooks_info["title_match_phrase"] not in item.title.lower():
@@ -436,6 +430,10 @@ class StreamStateManager(commands.Cog):
                                 continue
                         if webhook not in channel_cache.get("triggered_guilds", []):
                                 if webhook.startswith("https://hooks.slack.com"):
+                                    if isinstance(item, YoutubeVideo):
+                                        message = f"{item.user.display_name} is live on Youtube!\n{item.title}\nhttps://youtube.com/watch?v={item.id}"
+                                    else:
+                                        message = f"{item.user.display_name} is live on Twitch!\n{item.title}\nhttps://twitch.tv/{item.user.username}"
                                     try:
                                         r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
                                         rb = (await r.read()).decode()
@@ -447,6 +445,11 @@ class StreamStateManager(commands.Cog):
                                     except client_exceptions.ClientError as e:
                                         self.bot.log.error(f"{'[Youtube]' if isinstance(item, YoutubeVideo) else '[Twitch]'} Error sending slack online webhook for {item.user.display_name}: {str(e)}")
                                 elif webhook.startswith("https://discord.com/api/webhooks"):
+                                    user_escaped = item.user.display_name.replace('_', '\_')
+                                    if isinstance(item, YoutubeVideo):
+                                        message = f"{user_escaped} is live on Youtube!\n{item.title}\nhttps://youtube.com/watch?v={item.id}"
+                                    else:
+                                        message = f"{user_escaped} is live on Twitch!\n{item.title}\nhttps://twitch.tv/{item.user.username}"
                                     hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                                     try:
                                         await hook.send(message)
@@ -594,8 +597,6 @@ class StreamStateManager(commands.Cog):
                 callback_yaml = load(await c.read(), Loader=Loader)
 
             if webhooks_info := callback_yaml.get("callbacks", {}).get(streamer.id):
-                user_escaped = streamer.display_name.replace('_', '\_')
-                message = f"{user_escaped} is no longer live on Twitch"
                 if vod:
                     message += "\n"
                     message += f"{vod.url}"
@@ -603,6 +604,7 @@ class StreamStateManager(commands.Cog):
                 for webhook in webhooks_info["webhooks"]:
                     if webhook in channel_cache["triggered_guilds"]:
                         if webhook.startswith("https://hooks.slack.com"):
+                            message = f"{streamer.display_name} is no longer live on Twitch"
                             try:
                                 r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
                                 rb = (await r.read()).decode()
@@ -613,6 +615,8 @@ class StreamStateManager(commands.Cog):
                             except client_exceptions.ClientError as e:
                                 self.bot.log.error(f"[Twitch] Error sending slack online webhook for {streamer.display_name}: {str(e)}")
                         elif webhook.startswith("https://discord.com/api/webhooks"):
+                            user_escaped = streamer.display_name.replace('_', '\_')
+                            message = f"{user_escaped} is no longer live on Twitch"
                             hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                             try:
                                 await hook.send(message)
@@ -663,12 +667,10 @@ class StreamStateManager(commands.Cog):
                 callback_yaml = load(await c.read(), Loader=Loader)
 
             if webhooks_info := callback_yaml.get("callbacks", {}).get(channel.id):
-                user_escaped = channel.display_name.replace('_', '\_')
-                message = f"{user_escaped} is no longer live on Youtube\nhttps://youtube.com/watch?v={channel_cache.video_id}"
-
                 for webhook in webhooks_info["webhooks"]:
                     if webhook in channel_cache["triggered_guilds"]:
                         if webhook.startswith("https://hooks.slack.com"):
+                            message = f"{channel.display_name} is no longer live on Youtube\nhttps://youtube.com/watch?v={channel_cache.video_id}"
                             try:
                                 r = await self.bot.aSession.post(webhook, json={"text": message}, headers={"Content-type": "application/json"})
                                 rb = (await r.read()).decode()
@@ -679,6 +681,8 @@ class StreamStateManager(commands.Cog):
                             except client_exceptions.ClientError as e:
                                 self.bot.log.error(f"[Youtube] Error sending slack online webhook for {channel.display_name}: {str(e)}")
                         elif webhook.startswith("https://discord.com/api/webhooks"):
+                            user_escaped = channel.display_name.replace('_', '\_')
+                            message = f"{user_escaped} is no longer live on Youtube\nhttps://youtube.com/watch?v={channel_cache.video_id}"
                             hook = disnake.Webhook.from_url(webhook, session=self.bot.aSession)
                             try:
                                 await hook.send(message)
