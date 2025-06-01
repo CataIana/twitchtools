@@ -728,6 +728,7 @@ class CommandsCog(commands.Cog):
 
     @streamers_list.sub_command(name="twitch", description="List all the active streamer alerts setup in this server")
     async def streamers_list_twitch(self, ctx: ApplicationCustomContext):
+        await ctx.response.defer()
         await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_callbacks()
 
@@ -743,6 +744,7 @@ class CommandsCog(commands.Cog):
 
     @streamers_list.sub_command(name="youtube", description="List all active youtube streamer alerts setup in this server")
     async def streamers_list_youtube(self, ctx: ApplicationCustomContext):
+        await ctx.response.defer()
         await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_yt_callbacks()
 
@@ -762,6 +764,7 @@ class CommandsCog(commands.Cog):
 
     @streamers_delete.sub_command(name="twitch", description="Remove live alerts for a twitch streamer")
     async def streamers_delete_twitch(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=twitch_streamer_autocomplete)):
+        await ctx.response.defer()
         await self.bot.wait_until_db_ready()
         streamer_obj = await self.bot.tapi.get_user(user_login=streamer)
         channel_cache = await self.bot.db.get_channel_cache(streamer_obj)
@@ -784,6 +787,7 @@ class CommandsCog(commands.Cog):
 
     @streamers_delete.sub_command(name="youtube", description="Remove live alerts for a youtube channel")
     async def streamers_delete_youtube(self, ctx: ApplicationCustomContext, channel_id_or_display_name: str = commands.Param(autocomplete=youtube_streamer_autocomplete)):
+        await ctx.response.defer()
         await self.bot.wait_until_db_ready()
         callbacks = await self.bot.db.get_all_yt_callbacks()
         try:
@@ -901,6 +905,7 @@ class CommandsCog(commands.Cog):
 
     @titlechanges_delete.sub_command(name="twitch", description="Remove title change alerts for a twitch streamer")
     async def titlechanges_delete_twitch(self, ctx: ApplicationCustomContext, streamer: str = commands.Param(autocomplete=twitch_streamertitles_autocomplete)):
+        await ctx.response.defer()
         streamer_obj = await self.bot.tapi.get_user(user_login=streamer)
         await self.twitch_callback_deletion(ctx, streamer_obj, alert_type=AlertType.title)
         await ctx.send(f"{self.bot.emotes.success} Deleted title change alert for {streamer}")
@@ -911,6 +916,7 @@ class CommandsCog(commands.Cog):
 
     @titlechanges_list.sub_command(name="twitch", description="List all the active title change alerts setup in this server")
     async def titlechanges_list_twitch(self, ctx: ApplicationCustomContext):
+        await ctx.response.defer()
         title_callbacks = await self.bot.db.get_all_title_callbacks()
 
         if len(title_callbacks) == 0:
@@ -1086,6 +1092,7 @@ class CommandsCog(commands.Cog):
                              handle: str = commands.Param(default=None, description="Youtube's new username system, they typically start with an @"),
                              display_name: str = commands.Param(default=None, description="The actual name of a channel"),
                              username: str = commands.Param(default=None, description="Youtube's legacy system for usernames, only old channels have these")):
+        await ctx.response.defer()
         if user_id:
             user = await self.bot.yapi.get_user(user_id=user_id)
         elif handle:
@@ -1109,6 +1116,7 @@ class CommandsCog(commands.Cog):
     async def gettwitchuser(self, ctx: ApplicationCustomContext,
                             username: str = commands.Param(default=None, description="A channels unique username"),
                             user_id: str = commands.Param(default=None, description="A channels randomly generate ID")):
+        await ctx.response.defer()
         if username:
             user = await self.bot.tapi.get_user(user_login=username)
         elif user_id:
