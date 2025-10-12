@@ -14,8 +14,9 @@ if TYPE_CHECKING:
 
 
 class RecieverWebServer:
-    def __init__(self, bot, port: int = 18271):
+    def __init__(self, bot, host: str = "localhost", port: int = 18271):
         self.bot: TwitchCallBackBot = bot
+        self.host = host
         self.port = port
         self.web_server = web.Application()
         self.web_server.add_routes(
@@ -28,8 +29,8 @@ class RecieverWebServer:
     async def start(self):
         runner = web.AppRunner(self.web_server)
         await runner.setup()
-        await web.TCPSite(runner, host="localhost", port=self.port).start()
-        self.bot.log.info(f"[Webserver] Running on localhost:{self.port}")
+        await web.TCPSite(runner, host=self.host, port=self.port).start()
+        self.bot.log.info(f"[Webserver] Running on {self.host}:{self.port}")
         return self.web_server
 
     async def _info(self, request: web.Request):

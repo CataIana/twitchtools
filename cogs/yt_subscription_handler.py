@@ -1,5 +1,5 @@
 from asyncio import sleep
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 
 from disnake.ext import commands, tasks
@@ -28,7 +28,7 @@ class YTSubscriptionHandler(commands.Cog, name="Youtube Subscription Handler"):
         self.bot.log.debug("[Youtube] Resubscribing youtube callbacks")
         for channel, channel_data in (await self.bot.db.get_all_yt_callbacks()).items():
             expiry_time = channel_data.get("expiry_time", 0)
-            if expiry_time < datetime.utcnow().timestamp():
+            if expiry_time < datetime.now(UTC).timestamp():
                 self.bot.log.info(
                     f"[Youtube] Resubscribing YT channel {channel.display_name}")
                 await self.yt_subscribe(channel, channel_data)
@@ -36,7 +36,7 @@ class YTSubscriptionHandler(commands.Cog, name="Youtube Subscription Handler"):
     async def yt_subscribe(self, channel: PartialYoutubeUser, channel_data: YoutubeCallback):
         await self.bot.yapi.create_subscription(channel, channel_data.secret, channel_data.subscription_id)
         # Minus a day plus 100 seconds, ensures that the subscription never expires
-        timestamp = datetime.utcnow().timestamp() + (LEASE_SECONDS - 86500)
+        timestamp = datetime.now(UTC).timestamp() + (LEASE_SECONDS - 86500)
         await self.bot.db.write_yt_callback_expiration(channel, timestamp)
         await sleep(1)
 
