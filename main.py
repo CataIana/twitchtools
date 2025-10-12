@@ -53,7 +53,7 @@ class TwitchCallBackBot(commands.InteractionBot):
             raise BadAuthorization
 
         self.web_server = RecieverWebServer(
-            self, host=config["webserver_port"], port=config["webserver_port"])
+            self, host=config["webserver_host"], port=config["webserver_port"])
 
         self.db_connect_uri = config["mongodb_uri"]
         self._db_ready: Event = Event()
