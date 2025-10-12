@@ -264,7 +264,7 @@ class http_youtube:
         try:
             id = soup.find_all("yt:videoid")[0].text
         except IndexError:  # This is a video deletion/unpublish message, ignore
-            deleted_video_id = soup.feed.link['href'].split('watch?v=')[-1][-1]
+            deleted_video_id = soup.feed.link['href'].split('watch?v=')[-1]
             channel_cache = await self.bot.db.get_yt_channel_cache(channel)
             if channel_cache.is_live and channel_cache.video_id == deleted_video_id:
                 channel.origin = AlertOrigin.callback

@@ -85,7 +85,7 @@ class TwitchCallBackBot(commands.InteractionBot):
         self.emotes = Emotes
         self._uptime = time()
         self.application_invoke = self.process_application_commands
-        self.ratelimits: dict[str, Ratelimit] = {}
+        self.ratelimits: dict[str | int, Ratelimit] = {}
 
     async def ratelimit_request(self, streamer: Union[PartialYoutubeUser, PartialUser]):
         if self.ratelimits.get(streamer.id, None) is None:
@@ -130,7 +130,7 @@ class TwitchCallBackBot(commands.InteractionBot):
     async def on_application_command(self, interaction): return
 
     async def get_slash_context(self, interaction: disnake.interactions.Interaction, *, cls: Type[ACXT] = disnake.interactions.ApplicationCommandInteraction):
-        return cls(data=interaction, state=self._connection)
+        return cls(data=interaction, state=self._connection) # type: ignore
 
     def random_string_generator(self, str_size=21):
         return "".join(choice(ascii_letters) for _ in range(str_size))

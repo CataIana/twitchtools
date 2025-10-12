@@ -2,12 +2,13 @@ import asyncio
 import sys
 from collections import deque
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from os import getpid
 from textwrap import shorten
 from time import time
 from types import BuiltinFunctionType, CoroutineType, FunctionType, MethodType
+from typing import Optional
 
 import disnake
 import psutil
@@ -49,6 +50,90 @@ def DiscordTimezone(utc, format: TimestampOptions):
     return f"<t:{int(utc)}:{format.value}>"
 
 
+async def eval_autocomplete(ctx: ApplicationCustomContext, com: str) -> list[str]:
+    if not await ctx.bot.is_owner(ctx.author):
+        return ["You do not have permission to use this command"]
+    # pyright: ignore[reportAssignmentType]
+    cog: CommandsCog | None = ctx.application_command.cog
+    if cog:
+        com = com.split("await ", 1)[-1]  # Strip await
+        try:
+            com_split = '.'.join(com.split(".")[:-1])
+            var_request = '.'.join(com.split(".")[-1:])
+            if com_split == '':
+                com_split = var_request
+                var_request = ""
+            resp = await cog.aeval(ctx, com_split)
+            if isinstance(resp, CoroutineType):
+                resp = await resp
+        except Exception as ex:
+            return ["May want to keep typing...", "Exception: ", str(ex), com]
+        else:
+            if type(resp) == str:
+                return [resp]
+            if type(resp) == dict:
+                resp = munchify(resp)
+
+            attributes = []  # List of all attributes
+            # get a list of all attributes and their values, along with all the functions in seperate lists
+            for attr_name in dir(resp):
+                try:
+                    attr = getattr(resp, attr_name)
+                except AttributeError:
+                    continue
+                if attr_name.startswith("_"):
+                    continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
+                if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
+                    if var_request:
+                        if not str(attr_name).startswith(var_request):
+                            continue
+                    if isinstance(attr, (list, deque)):
+                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
+                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
+                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
+                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    elif type(attr) == set:
+                        attr_ = list(attr)
+                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
+                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+                    else:
+                        b = com_split + "." + \
+                            cog.remove_tokens(
+                                str(attr_name)) + ": {} [" + type(attr).__name__ + "]"
+                        attributes.append(
+                            b.format(str(attr)[:100-len(b)-5] + " [...]"))
+                else:
+                    if var_request:
+                        if not str(attr_name).startswith(var_request):
+                            continue
+                    if asyncio.iscoroutinefunction(attr):
+                        attributes.append(shorten(
+                            com_split + "." + f"{str(attr_name)}: [async {type(attr).__name__}]", width=100))
+                    else:
+                        attributes.append(shorten(
+                            com_split + "." + f"{str(attr_name)}: [{type(attr).__name__}]", width=100))
+            return attributes[:25]
+    else:
+        return []
+
+
+# Autocompleters
+async def twitch_streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+    callbacks = await ctx.bot.db.get_all_title_callbacks()
+    return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
+
+
+async def youtube_streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+    callbacks = await ctx.bot.db.get_all_yt_callbacks()
+    return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
+
+
+async def twitch_streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
+    callbacks = await ctx.bot.db.get_all_callbacks()
+    return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
+
+
 class CommandsCog(commands.Cog):
     def __init__(self, bot):
         self.bot: TwitchCallBackBot = bot
@@ -66,7 +151,7 @@ class CommandsCog(commands.Cog):
     async def on_slash_command(self, ctx: ApplicationCustomContext):
         if ctx.application_command:
             self.bot.log.info(
-                f"[Command] Triggered {ctx.application_command.qualified_name} by {ctx.author} in {ctx.guild.name}")
+                f"[Command] Triggered {ctx.application_command.qualified_name} by {ctx.author} in {getattr(ctx.guild, 'name', None)}")
         else:
             self.bot.log.info(f"Attemped to run invalid slash command!")
 
@@ -138,69 +223,6 @@ class CommandsCog(commands.Cog):
             string = string.replace(var, "<Hidden>")
         return string
 
-    async def eval_autocomplete(ctx: ApplicationCustomContext, com: str):
-        if not await ctx.bot.is_owner(ctx.author):
-            return ["You do not have permission to use this command"]
-        self = ctx.application_command.cog
-        com = com.split("await ", 1)[-1]  # Strip await
-        try:
-            com_split = '.'.join(com.split(".")[:-1])
-            var_request = '.'.join(com.split(".")[-1:])
-            if com_split == '':
-                com_split = var_request
-                var_request = ""
-            resp = await self.aeval(ctx, com_split)
-            if isinstance(resp, CoroutineType):
-                resp = await resp
-        except Exception as ex:
-            return ["May want to keep typing...", "Exception: ", str(ex), com]
-        else:
-            if type(resp) == str:
-                return [resp]
-            if type(resp) == dict:
-                resp = munchify(resp)
-
-            attributes = []  # List of all attributes
-            # get a list of all attributes and their values, along with all the functions in seperate lists
-            for attr_name in dir(resp):
-                try:
-                    attr = getattr(resp, attr_name)
-                except AttributeError:
-                    pass
-                if attr_name.startswith("_"):
-                    continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
-                if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
-                    if var_request:
-                        if not str(attr_name).startswith(var_request):
-                            continue
-                    if isinstance(attr, (list, deque)):
-                        attributes.append(shorten(com_split + "." + self.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
-                        attributes.append(shorten(com_split + "." + self.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    elif type(attr) == set:
-                        attr_ = list(attr)
-                        attributes.append(shorten(com_split + "." + self.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    else:
-                        b = com_split + "." + \
-                            self.remove_tokens(
-                                str(attr_name)) + ": {} [" + type(attr).__name__ + "]"
-                        attributes.append(
-                            b.format(str(attr)[:100-len(b)-5] + " [...]"))
-                else:
-                    if var_request:
-                        if not str(attr_name).startswith(var_request):
-                            continue
-                    if asyncio.iscoroutinefunction(attr):
-                        attributes.append(shorten(
-                            com_split + "." + f"{str(attr_name)}: [async {type(attr).__name__}]", width=100))
-                    else:
-                        attributes.append(shorten(
-                            com_split + "." + f"{str(attr_name)}: [{type(attr).__name__}]", width=100))
-            return attributes[:25]
-
     @commands.slash_command(description="Evalute a string as a command")
     @commands.is_owner()
     async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True, show_all: bool = False):
@@ -229,7 +251,7 @@ class CommandsCog(commands.Cog):
                     try:
                         attr = getattr(resp, attr_name)
                     except AttributeError:
-                        pass
+                        continue
                     if not show_all:
                         if attr_name.startswith("_"):
                             continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
@@ -342,21 +364,6 @@ class CommandsCog(commands.Cog):
 
     ##########################################################
 
-    # Autocompleters
-    async def twitch_streamertitles_autocomplete(ctx: ApplicationCustomContext, user_input: str):
-        callbacks = await ctx.bot.db.get_all_title_callbacks()
-        return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
-
-    async def youtube_streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
-        callbacks = await ctx.bot.db.get_all_yt_callbacks()
-        return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
-
-    async def twitch_streamer_autocomplete(ctx: ApplicationCustomContext, user_input: str):
-        callbacks = await ctx.bot.db.get_all_callbacks()
-        return [alert_info['display_name'] for alert_info in callbacks.values() if str(ctx.guild.id) in alert_info['alert_roles'].keys() and alert_info['display_name'].lower().startswith(user_input)][:25]
-
-    ##########################################################
-
     @commands.slash_command()
     @has_manage_permissions()
     async def streamers(self, ctx: ApplicationCustomContext):
@@ -368,50 +375,51 @@ class CommandsCog(commands.Cog):
 
     @streamers_add.sub_command(name="mode_zero", description="Dynamic notification + Temporary live status channel for a channel")
     async def streamers_add_mode_0(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   notification_channel: TextChannel, alert_role: Optional[Role] = None, custom_live_message: Optional[str] = None,
                                    allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, mode=0)
+                                                 custom_live_message=custom_live_message, mode=0)
         elif platform == PlatformChoice.Youtube:
             return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=0)
+                                                  custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=0)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_one", description="Only sends a dynamic live notification for a live stream")
     async def streamers_add_mode_1(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   notification_channel: TextChannel, alert_role: Optional[Role] = None, custom_live_message: Optional[str] = None,
                                    allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                custom_live_message=custom_live_message, mode=1)
+                                                 custom_live_message=custom_live_message, mode=1)
         elif platform == PlatformChoice.Youtube:
             return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-            custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=1)
+                                                  custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=1)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     @streamers_add.sub_command(name="mode_two", description="Dynamic live notification + Persistent text channel reporting channel live status")
     async def streamers_add_mode_2(self, ctx: ApplicationCustomContext, platform: PlatformChoice, streamer_name_or_id: str,
-                                   notification_channel: TextChannel, status_channel: TextChannel, alert_role: Role = None, custom_live_message: str = None,
+                                   notification_channel: TextChannel, status_channel: TextChannel, alert_role: Optional[Role] = None, custom_live_message: Optional[str] = None,
                                    allow_youtube_premieres: bool = commands.Param(default=False, description="Youtube Only: Allow premieres to trigger alerts")):
         if platform == PlatformChoice.Twitch:
             return await self.addstreamer_twitch(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
-                status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
+                                                 status_channel=status_channel, custom_live_message=custom_live_message, mode=2)
         elif platform == PlatformChoice.Youtube:
-            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role, 
-                status_channel=status_channel, custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=2)
+            return await self.addstreamer_youtube(ctx, streamer_name_or_id, notification_channel, alert_role=alert_role,
+                                                  status_channel=status_channel, custom_live_message=custom_live_message, allow_youtube_premieres=allow_youtube_premieres, mode=2)
         return await ctx.send(f"{self.bot.emotes.error} Invalid platform choice", ephemeral=True)
 
     async def addstreamer_twitch(self, ctx: ApplicationCustomContext, streamer_username: str,
-                                 notification_channel: TextChannel, mode: int, alert_role: Role = None,
-                                 status_channel: TextChannel = None, custom_live_message: str = None):
+                                 notification_channel: TextChannel, mode: int, alert_role: Optional[Role] = None,
+                                 status_channel: Optional[TextChannel] = None, custom_live_message: Optional[str] = None):
         # Run checks on all the supplied arguments
         streamer = await self.bot.tapi.get_user(user_login=streamer_username)
+        if not streamer and streamer_username.isdigit():
+            streamer = await self.bot.tapi.get_user(user_id=int(streamer_username))
+
         if not streamer:
-            streamer = await self.bot.tapi.get_user(user_id=streamer_username)
-            if not streamer:
-                raise commands.BadArgument(
-                    f"Could not locate twitch channel {streamer_username}!")
+            raise commands.BadArgument(
+                f"Could not locate twitch channel {streamer_username}!")
         check_channel_permissions(ctx, channel=notification_channel)
         if status_channel is not None:
             check_channel_permissions(ctx, channel=status_channel)
@@ -504,11 +512,12 @@ class CommandsCog(commands.Cog):
             streamer.origin = AlertOrigin.catchup
             if status_channel is not None:
                 await status_channel.edit(name="stream-offline")
-            self.bot.queue.put_nowait(streamer)            
+            self.bot.queue.put_nowait(streamer)
 
         embed = Embed(title="Successfully added new streamer",
                       color=self.bot.colour)
-        embed.add_field(name="Channel Name", value=streamer.display_name, inline=True)
+        embed.add_field(name="Channel Name",
+                        value=streamer.display_name, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
         if alert_role:
@@ -523,13 +532,13 @@ class CommandsCog(commands.Cog):
         await ctx.send(embed=embed)
 
     async def addstreamer_youtube(self, ctx: ApplicationCustomContext, channel_id_or_handle_or_display_name: str,
-                                  notification_channel: TextChannel, mode: int, alert_role: Role = None,
-                                  status_channel: TextChannel = None, custom_live_message: str = None, allow_youtube_premieres: bool = False):
+                                  notification_channel: TextChannel, mode: int, alert_role: Optional[Role] = None,
+                                  status_channel: Optional[TextChannel] = None, custom_live_message: Optional[str] = None, allow_youtube_premieres: bool = False):
 
         # Find account first
         # Assume display name first, saves an api request
         channel = (await self.bot.yapi.get_user(user_id=channel_id_or_handle_or_display_name)
-                   or await self.bot.yapi.get_user(handle=channel_id_or_handle_or_display_name) 
+                   or await self.bot.yapi.get_user(handle=channel_id_or_handle_or_display_name)
                    or await self.bot.yapi.get_user(display_name=channel_id_or_handle_or_display_name)
                    or await self.bot.yapi.get_user(user_name=channel_id_or_handle_or_display_name))
         if channel is None:
@@ -628,7 +637,8 @@ class CommandsCog(commands.Cog):
 
         embed = Embed(title="Successfully added new youtube channel",
                       color=self.bot.colour)
-        embed.add_field(name="Channel Name", value=channel.display_name, inline=True)
+        embed.add_field(name="Channel Name",
+                        value=channel.display_name, inline=True)
         embed.add_field(name="Channel ID", value=channel.id, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
@@ -659,7 +669,7 @@ class CommandsCog(commands.Cog):
             if len(name) >= amount:
                 return f"{name[:amount-3]}..."
             return name
-        
+
         for streamer_id, alert_info in dict(sorted(data.items(), key=sorter, reverse=reverse)).items():
             if str(ctx.guild.id) in alert_info["alert_roles"].keys():
                 info = alert_info["alert_roles"][str(ctx.guild.id)]
@@ -690,8 +700,8 @@ class CommandsCog(commands.Cog):
                 if last_live == 0:
                     last_live = "Unknown"
                 else:
-                    last_live = datetime.utcfromtimestamp(
-                        last_live).strftime("%d-%m-%y %H:%M")
+                    last_live = datetime.fromtimestamp(
+                        last_live, tz=UTC).strftime("%d-%m-%y %H:%M")
 
                 # If premieres enabled, youtube only
                 if info.get("enable_premieres", False):
@@ -704,7 +714,7 @@ class CommandsCog(commands.Cog):
                 # Add page
                 # Check if current page length + added string are near character limit. If so, start a new page.
                 if sum(len(p) for p in page) + len(new_page_string) > 1980 or len(page) > 13:
-                    if pages == []: # If this is the first page
+                    if pages == []:  # If this is the first page
                         pages.append(
                             '\n'.join(page[:-1] + [page[-1] + "```"]))
                     else:
@@ -893,7 +903,8 @@ class CommandsCog(commands.Cog):
 
         embed = Embed(
             title="Successfully added new title change alert", color=self.bot.colour)
-        embed.add_field(name="Channel Name", value=streamer.display_name, inline=True)
+        embed.add_field(name="Channel Name",
+                        value=streamer.display_name, inline=True)
         embed.add_field(name="Notification Channel",
                         value=notification_channel.mention, inline=True)
         embed.add_field(name="Alert Role", value=alert_role, inline=True)
@@ -1050,11 +1061,14 @@ class CommandsCog(commands.Cog):
         async for streamer, callback_info in self.bot.db.async_get_all_callbacks():
             await asyncio.sleep(0.2)
             if callback_info.get("online_id", None) is not None and callback_info.get("online_id", None) not in all_ids:
-                self.bot.log.info(f"Deleting subscriptions for {streamer.display_name}")
+                self.bot.log.info(
+                    f"Deleting subscriptions for {streamer.display_name}")
                 await self.bot.tapi.delete_subscription(callback_info["online_id"])
-            self.bot.log.info(f"Re-creating subscriptions for {streamer.display_name}")
+            self.bot.log.info(
+                f"Re-creating subscriptions for {streamer.display_name}")
             if not callback_info.get("secret"):
-                self.bot.log.warning(f"Generating secret for {streamer.display_name} (This shouldn't be happening!)")
+                self.bot.log.warning(
+                    f"Generating secret for {streamer.display_name} (This shouldn't be happening!)")
                 callback_info["secret"] = self.bot.random_string_generator(21)
                 await self.bot.db.write_callback(streamer, callback_info)
             rj1 = await self.bot.tapi.create_subscription(SubscriptionType.STREAM_ONLINE, streamer=streamer, secret=callback_info["secret"], alert_type=AlertType.status)
@@ -1088,9 +1102,12 @@ class CommandsCog(commands.Cog):
 
     @commands.slash_command(description="Get a youtube user/channel from their various unique identification. Only one option is required")
     async def getyoutubeuser(self, ctx: ApplicationCustomContext,
-                             user_id: str = commands.Param(default=None, description="A string of randomly generated characters, like UCV6mNrW8CrmWtcxWfQXy11g."),
-                             handle: str = commands.Param(default=None, description="Youtube's new username system, they typically start with an @"),
-                             display_name: str = commands.Param(default=None, description="The actual name of a channel"),
+                             user_id: str = commands.Param(
+                                 default=None, description="A string of randomly generated characters, like UCV6mNrW8CrmWtcxWfQXy11g."),
+                             handle: str = commands.Param(
+                                 default=None, description="Youtube's new username system, they typically start with an @"),
+                             display_name: str = commands.Param(
+                                 default=None, description="The actual name of a channel"),
                              username: str = commands.Param(default=None, description="Youtube's legacy system for usernames, only old channels have these")):
         await ctx.response.defer()
         if user_id:
@@ -1100,22 +1117,27 @@ class CommandsCog(commands.Cog):
         elif display_name:
             user = await self.bot.yapi.get_user(display_name=display_name)
         elif username:
-            user = await self.bot.yapi.get_user(username=username)
+            user = await self.bot.yapi.get_user(user_name=username)
         else:
             return await ctx.send(f"{self.bot.emotes.error} You must enter one of the options!")
+
+        if user is None:
+            return await ctx.send(f"{self.bot.emotes.error} Could not find youtube user \"{user_id or handle or display_name or username}\"")
 
         embed = Embed(title="Youtube User Info",
                       timestamp=utcnow(), colour=self.bot.colour)
         embed.set_author(name=user.display_name, icon_url=user.avatar_url)
         embed.add_field(name="Display Name", value=user.display_name)
         embed.add_field(name="Channel ID", value=user.id)
-        embed.add_field(name="Channel Description", value=user.description, inline=False)
+        embed.add_field(name="Channel Description",
+                        value=user.description, inline=False)
         await ctx.send(embed=embed)
 
     @commands.slash_command(description="Fetches information on a twitch user. Only one option is required")
     async def gettwitchuser(self, ctx: ApplicationCustomContext,
-                            username: str = commands.Param(default=None, description="A channels unique username"),
-                            user_id: str = commands.Param(default=None, description="A channels randomly generate ID")):
+                            username: str = commands.Param(
+                                default=None, description="A channels unique username"),
+                            user_id: int = commands.Param(default=None, description="A channels randomly generate ID")):
         await ctx.response.defer()
         if username:
             user = await self.bot.tapi.get_user(user_login=username)
@@ -1142,7 +1164,8 @@ class CommandsCog(commands.Cog):
         embed.add_field(name="Follow Count", value=follow_count)
         if user.view_count != 0:
             embed.add_field(name="View Count", value=user.view_count)
-        embed.add_field(name="Broadcaster Type", value=user.broadcaster_type.name.title())
+        embed.add_field(name="Broadcaster Type",
+                        value=user.broadcaster_type.name.title())
         if user.type != UserType.none:
             embed.add_field(name="User Type", value=user.type.name.title())
         await ctx.send(embed=embed)
