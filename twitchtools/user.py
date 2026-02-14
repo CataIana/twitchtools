@@ -33,6 +33,7 @@ class PartialYoutubeUser:
         self.id: str = user_id
         self.display_name: str = display_name
         self.origin: AlertOrigin = origin
+        self.offline_video_id: Optional[str]
 
     def __str__(self) -> str:
         return self.display_name

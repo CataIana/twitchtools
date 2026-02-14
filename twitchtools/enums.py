@@ -352,7 +352,7 @@ class ChannelCache(Enum):
 class YoutubeChannelCache(Enum):
     alert_cooldown: int
     channel_id: str
-    video_id: int
+    video_id: str
     is_live: bool
     live_channels: list[int]
     live_alerts: dict[str, int]
@@ -361,8 +361,8 @@ class YoutubeChannelCache(Enum):
 
 
 class Emotes(Enum):
-    error: str = "❌"
-    success: str = "✅"
+    error = "❌"
+    success = "✅"
 
     # Override str conversion to return value so we don't have to add .value to every usage
     def __str__(self):

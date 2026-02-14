@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from disnake.ext import commands, tasks
 
@@ -61,7 +61,7 @@ class Catchup(commands.Cog):
         self.bot.log.info(f"Finished manual server catchup for {ctx.guild.name}")
         await ctx.send(f"{self.bot.emotes.success} Finished server catchup!", ephemeral=True)
 
-    async def twitch_catchup(self, callbacks: dict[str, Callback] = None):
+    async def twitch_catchup(self, callbacks: Optional[dict[str, Callback]] = None):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
         callbacks = callbacks or await self.bot.db.get_all_callbacks()
@@ -87,7 +87,7 @@ class Catchup(commands.Cog):
                 self.bot.queue.put_nowait(PartialUser(
                     streamer_id, callback_info.display_name.lower(), callback_info.display_name, origin=AlertOrigin.catchup))
 
-    async def youtube_catchup(self, callbacks: dict[PartialYoutubeUser, YoutubeCallback] = None):
+    async def youtube_catchup(self, callbacks: Optional[dict[PartialYoutubeUser, YoutubeCallback]] = None):
         await self.bot.wait_until_ready()
         await self.bot.wait_until_db_ready()
         callbacks = callbacks or await self.bot.db.get_all_yt_callbacks()
@@ -122,6 +122,7 @@ class Catchup(commands.Cog):
             if channel not in non_live_channels:
                 if caches[channel].video_id in ended_videos:
                     channel.origin = AlertOrigin.catchup
+                    channel.offline_video_id = caches[channel].video_id
                     self.bot.queue.put_nowait(channel)
                 else:
                     # Video requested here purely for title updates
@@ -136,6 +137,8 @@ class Catchup(commands.Cog):
                     try:
                         video = await self.bot.yapi.get_stream(video_id, origin=AlertOrigin.catchup)
                     except (VideoNotFound, VideoNotStream, VideoStreamEnded):
+                        continue
+                    if not video:
                         continue
                     # Update display name if needed
                     if callback_info.display_name != video.user.display_name:

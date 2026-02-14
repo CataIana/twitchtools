@@ -12,7 +12,10 @@ class ApplicationCustomContext(ApplicationCommandInteraction):
         super().__init__(*args, **kwargs)
         if self.bot.intents.members:
             if self.guild:
-                self.author = self.guild.get_member(self.author.id)
+                if author := self.guild.get_member(self.author.id):
+                    self.author = author
+                else:
+                    self.author = self.bot.get_user(self.author.id)
             else:
                 self.author = self.bot.get_user(self.author.id)
         self.edit = self.edit_original_message

@@ -17,6 +17,7 @@ from twitchtools.video import YoutubeVideo
 
 if TYPE_CHECKING:
     from main import TwitchCallBackBot
+    from motor.core import AgnosticDatabase
 
 
 class DB(commands.Cog, name="Database Cog"):
@@ -56,7 +57,7 @@ class DB(commands.Cog, name="Database Cog"):
             try:
                 await self._mongo.server_info()
                 db_name = await self.get_db_name()
-                self._db: motor.motor_asyncio.core.AgnosticDatabase = self._mongo[db_name]
+                self._db: AgnosticDatabase = self._mongo[db_name]
                 self.bot._db_ready.set()
                 self.bot.log.info(f"[Database] Connected ({db_name})")
             except ServerSelectionTimeoutError as e:
