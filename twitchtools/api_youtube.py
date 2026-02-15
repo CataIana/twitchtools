@@ -342,7 +342,8 @@ class http_youtube:
                     except Exception as e:
                         self.bot.log.error(
                             f"Exception fetching uploads playlist for {channel.display_name}: {str(e)}")
-            self.bot.log.warning(f"[Youtube] Failed to get callback info for {channel.display_name}")
+            else:
+                self.bot.log.warning(f"[Youtube] Failed to get callback info for {channel.display_name}")
         return ids_dict
 
     async def are_videos_live(self, video_ids: dict[PartialYoutubeUser, list[str]]) -> dict[PartialYoutubeUser, str]:
