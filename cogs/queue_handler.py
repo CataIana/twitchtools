@@ -34,8 +34,15 @@ class QueueHandler(commands.Cog):
     async def queue_handler(self):
         self.bot.log.debug("Queue Worker Started")
         while not self.bot.is_closed():
-            item: Union[Stream, User, TitleEvent] = await self.bot.queue.get()
-            self.bot.log.debug(f"Recieved task of type {type(item).__name__}")
+            item: Union[Stream, User, PartialUser, TitleEvent, YoutubeVideo, YoutubeUser, PartialYoutubeUser] = await self.bot.queue.get()
+            if isinstance(item, (Stream, YoutubeVideo)):
+                self.bot.log.debug(f"Recieved task with type {type(item).__name__} for {item.user.display_name}")
+            elif isinstance(item, (User, PartialUser, YoutubeUser, PartialYoutubeUser)):
+                self.bot.log.debug(f"Recieved task with type {type(item).__name__} for {item.display_name}")    
+            elif isinstance(item, TitleEvent):
+                self.bot.log.debug(f"Recieved task with type {type(item).__name__} for {item.broadcaster.display_name}")
+            else:
+                self.bot.log.debug(f"Recieved task with type {type(item).__name__}")
             if self.status_cog is None:
                 self.status_cog = self.bot.get_cog("StreamStatus")
                 if self.status_cog is None:
@@ -68,10 +75,17 @@ class QueueHandler(commands.Cog):
                 self.bot.dispatch("youtube_streamer_offline", item)
 
             else:
-                self.bot.log.warn(
+                self.bot.log.warning(
                     f"Recieved bad queue object with type \"{type(item).__name__}\"!")
 
-            self.bot.log.debug(f"Finished task with type {type(item).__name__}")
+            if isinstance(item, (Stream, YoutubeVideo)):
+                self.bot.log.debug(f"Finished task with type {type(item).__name__} for {item.user.display_name}")
+            elif isinstance(item, (User, PartialUser, YoutubeUser, PartialYoutubeUser)):
+                self.bot.log.debug(f"Finished task with type {type(item).__name__} for {item.display_name}")    
+            elif isinstance(item, TitleEvent):
+                self.bot.log.debug(f"Finished task with type {type(item).__name__} for {item.broadcaster.display_name}")
+            else:
+                self.bot.log.debug(f"Finished task with type {type(item).__name__}")
             self.bot.queue.task_done()
 
 

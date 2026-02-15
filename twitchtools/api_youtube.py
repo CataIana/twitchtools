@@ -49,7 +49,7 @@ class http_youtube:
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
-    async def get_user(self, user: PartialYoutubeUser = None, user_id: str = None, display_name: str = None, user_name: str = None, handle: str = None) -> Optional[YoutubeUser]:
+    async def get_user(self, user: Optional[PartialYoutubeUser] = None, user_id: Optional[str] = None, display_name: Optional[str] = None, user_name: Optional[str] = None, handle: Optional[str] = None) -> Optional[YoutubeUser]:
         if user is not None:
             r = await self._request(f"{self.base}/channels?id={user.id}&part=snippet")
         elif user_id is not None:
@@ -75,7 +75,7 @@ class http_youtube:
         resp = await self.bot.aSession.get(url)
         soup = BeautifulSoup(await resp.text(), 'html.parser')
         try:
-            channel_id = soup.select_one('meta[property="og:url"]')['content'].strip('/').split('/')[-1]
+            channel_id = soup.select_one('meta[property="og:url"]')['content'].strip('/').split('/')[-1] # type: ignore
         except TypeError:
             return None
         return await self._request(f"{self.base}/channels?id={channel_id}&part=snippet")
@@ -88,7 +88,7 @@ class http_youtube:
         except KeyError:
             return None
 
-    async def create_subscription(self, channel: PartialYoutubeUser, secret: str, subscription_id: str = None) -> YoutubeSubscription:
+    async def create_subscription(self, channel: PartialYoutubeUser, secret: str, subscription_id: str = "") -> YoutubeSubscription:
         #  For resubscriptions an ID already exists, reuse it
         subscription_id = subscription_id or self.bot.random_string_generator(
             21)
@@ -214,7 +214,7 @@ class http_youtube:
                 ended_videos.append(id)
         return ended_videos
 
-    async def get_stream(self, video_id: str, origin: AlertOrigin = AlertOrigin.callback) -> Optional[YoutubeVideo]:
+    async def get_stream(self, video_id: str, origin: AlertOrigin = AlertOrigin.callback) -> YoutubeVideo:
         stream = await self._request(f"{self.base}/videos?id={video_id}&part=liveStreamingDetails,status")
         stream_json = await stream.json()
         # Check if video is a stream first
@@ -262,20 +262,23 @@ class http_youtube:
 
         display_name = soup.find_all('name')[0].text
         try:
-            id = soup.find_all("yt:videoid")[0].text
+            try:
+                id = soup.find_all("yt:videoid")[0].text
+            except IndexError:
+                id = soup.find_all("yt:videoId")[0].text
         except IndexError:  # This is a video deletion/unpublish message, ignore
-            deleted_video_id = soup.feed.link['href'].split('watch?v=')[-1]
-            channel_cache = await self.bot.db.get_yt_channel_cache(channel)
-            if channel_cache.is_live and channel_cache.video_id == deleted_video_id:
-                channel.origin = AlertOrigin.callback
-                self.bot.queue.put_nowait(channel)
+            deleted_video_id = soup.feed.link['href'].split('watch?v=')[-1] # type: ignore
+            if channel_cache := await self.bot.db.get_yt_channel_cache(channel):
+                if channel_cache.is_live and channel_cache.video_id == deleted_video_id:
+                    channel.origin = AlertOrigin.callback
+                    self.bot.queue.put_nowait(channel)
             self.bot.log.info(
                 f"[Youtube] {display_name} deleted video {deleted_video_id}")
             return
         #channel_id = soup.find_all("yt:channelid")[0].text
 
         last_vid = await self.bot.db.get_last_yt_vid(channel) or {}
-        last_vid_id: str = last_vid.get("video_id", None)
+        last_vid_id: str = last_vid.get("video_id", "")
         last_vid_publish_time: int = last_vid.get("publish_time", 0)
 
         # Check video in cache
@@ -308,7 +311,7 @@ class http_youtube:
         return video
 
     async def is_channel_live(self, channel: PartialYoutubeUser) -> Optional[str]:
-        if ids := (await self.get_recent_video_ids(channel)).get(channel, None):
+        if ids := (await self.get_recent_video_ids([channel])).get(channel, None):
             stream = await self._request(f"{self.base}/videos?id={','.join(ids)}&part=liveStreamingDetails,status")
             stream_json = await stream.json()
             # Check if video is a stream and return ID if so
@@ -319,27 +322,27 @@ class http_youtube:
 
     async def get_recent_video_ids(self, channels: list[PartialYoutubeUser]) -> dict[PartialYoutubeUser, list[str]]:
         ids_dict: dict[PartialYoutubeUser, list[str]] = {}
-        if type(channels) != list:
-            channels = [channels]
         for channel in channels:
-            callback = await self.bot.db.get_yt_callback(channel)
-            r = await self.bot.aSession.get(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel.id}")
-            soup = BeautifulSoup(await r.read(), features="xml")
-            # Read the most recent 2 entries and extract the video IDs
-            ids_search = soup.find_all("yt:videoid")
-            ids_dict[channel] = [id.text for id in ids_search]
-            if playlist_id := callback.get("uploads_playlist_id", None):
-                try:
-                    r = await self._request(f"{self.base}/playlistItems?playlistId={playlist_id}&part=contentDetails")
-                    rj = await r.json()
-                    api_ids = [item["contentDetails"]["videoId"]
-                               for item in rj.get("items", [])]
-                    for id in api_ids:
-                        if id not in ids_dict[channel]:
-                            ids_dict[channel].append(id)
-                except Exception as e:
-                    self.bot.log.error(
-                        f"Exception fetching uploads playlist for {channel.display_name}: {str(e)}")
+            if callback := await self.bot.db.get_yt_callback(channel):
+                r = await self.bot.aSession.get(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel.id}")
+                soup = BeautifulSoup(await r.read(), features="xml")
+                # Read the most recent 2 entries and extract the video IDs
+                ids_search = soup.find_all("yt:videoid")
+                ids_search += soup.find_all("yt:videoId")
+                ids_dict[channel] = [id.text for id in ids_search]
+                if playlist_id := callback.get("uploads_playlist_id", None):
+                    try:
+                        r = await self._request(f"{self.base}/playlistItems?playlistId={playlist_id}&part=contentDetails")
+                        rj = await r.json()
+                        api_ids = [item["contentDetails"]["videoId"]
+                                for item in rj.get("items", [])]
+                        for id in api_ids:
+                            if id not in ids_dict[channel]:
+                                ids_dict[channel].append(id)
+                    except Exception as e:
+                        self.bot.log.error(
+                            f"Exception fetching uploads playlist for {channel.display_name}: {str(e)}")
+            self.bot.log.warning(f"[Youtube] Failed to get callback info for {channel.display_name}")
         return ids_dict
 
     async def are_videos_live(self, video_ids: dict[PartialYoutubeUser, list[str]]) -> dict[PartialYoutubeUser, str]:
@@ -351,11 +354,13 @@ class http_youtube:
             stream = await self._request(f"{self.base}/videos?id={','.join(chunk)}&part=liveStreamingDetails,status")
             stream_json = await stream.json()
             # Check if video is a stream and return ID if so
+            channel = None
             for item in stream_json["items"]:
                 video_type = self.get_video_type(item)
                 if video_type != YoutubeVideoType.video and not self.has_stream_ended(item):
                     for c, v in video_ids.items():
                         if item["id"] in v:
                             channel = c
-                    live_channels[channel] = item["id"]
+                    if channel:
+                        live_channels[channel] = item["id"]
         return live_channels

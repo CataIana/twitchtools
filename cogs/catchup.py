@@ -45,7 +45,7 @@ class Catchup(commands.Cog):
         await ctx.response.defer(ephemeral=True)
         await self.twitch_catchup()
         await self.youtube_catchup()
-        self.bot.log.info("Finished manual catchup")
+        self.bot.log.info("[Catchup] Finished manual catchup")
         await ctx.send(f"{self.bot.emotes.success} Finished catchup!", ephemeral=True)
     
     @catchup.sub_command(name="server", description="Run streamer catchup manually for streamers in this server")
@@ -102,6 +102,7 @@ class Catchup(commands.Cog):
         # Filter live channels out
         non_live_channels = [c for c in callbacks.keys(
         ) if not caches[c].get("is_live", False)]
+        self.bot.log.debug(f"Channels not currently live: {non_live_channels}")
         # Fetch recent video IDs from each channel. No API cost. Only check non live channels. Returns dict[channel, list[video_id]]
         recent_vids = await self.bot.yapi.get_recent_video_ids(non_live_channels)
         self.bot.log.debug(f"Recent Video IDs for Channels: {recent_vids}")

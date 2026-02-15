@@ -4,7 +4,7 @@ from typing import Optional, Union
 from dateutil import parser
 
 from .enums import (AlertOrigin, Languages, VideoPrivacy, VideoType,
-                    YoutubeVideoType)
+                    YoutubeVideoType, MutedSegments)
 from .user import PartialUser, PartialYoutubeUser, YoutubeUser
 
 
@@ -34,7 +34,7 @@ class Video:
         self.published_at = parser.parse(published_at)
         self.url: str = url
         self.thumbnail_url: Optional[str] = thumbnail_url or None
-        self.viewable: str = VideoPrivacy(viewable)
+        self.viewable = VideoPrivacy(viewable)
         self.view_count: int = int(view_count)
         try:
             self.language: Languages = Languages[language.upper()]
@@ -42,7 +42,7 @@ class Video:
             self.language: Languages = Languages.OTHER
         self.type = VideoType[type]
         self.duration: int = get_total_seconds(duration)
-        self.muted_segments: Optional[list[dict[str]]] = muted_segments
+        self.muted_segments: Optional[list[MutedSegments]] = muted_segments
         
     def __repr__(self) -> str:
         return f'<{type(self).__name__} id={self.id} user={self.user.login!r}>'

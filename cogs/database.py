@@ -94,7 +94,7 @@ class DB(commands.Cog, name="Database Cog"):
             return munchify(callback)
         return None
 
-    async def get_callback_by_id(self, broadcaster_id: int) -> Optional[Callback]:
+    async def get_callback_by_id(self, broadcaster_id: Union[int, str]) -> Optional[Callback]:
         await self.check_connect()
         callback = await self._db.callbacks.find_one({"_id": str(broadcaster_id)})
         if callback:
@@ -133,7 +133,7 @@ class DB(commands.Cog, name="Database Cog"):
             return munchify(callback)
         return None
 
-    async def get_title_callback_by_id(self, broadcaster_id: int) -> Optional[TitleCallback]:
+    async def get_title_callback_by_id(self, broadcaster_id: Union[int, str]) -> Optional[TitleCallback]:
         await self.check_connect()
         callback = await self._db.tcallbacks.find_one({"_id": str(broadcaster_id)})
         if callback:

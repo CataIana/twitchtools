@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 
 class AlertOrigin(Enum):
@@ -385,3 +385,7 @@ class YoutubeVideoType(Enum):
 class PlatformChoice(str, Enum):
     Youtube = "youtube"
     Twitch = "twitch"
+
+class MutedSegments(TypedDict):
+    duration: int
+    offset: int

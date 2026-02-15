@@ -101,7 +101,7 @@ async def get_manager_role(guild: Guild) -> Optional[int]:
         return None
 
 
-async def write_manager_role(guild: Guild, role: Role = None) -> None:
+async def write_manager_role(guild: Guild, role: Role) -> None:
     if not os.path.isdir("config"):
         os.mkdir("config")
     try:

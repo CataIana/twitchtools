@@ -8,6 +8,8 @@ from disnake.ext.commands.interaction_bot_base import _app_commands_diff
 if TYPE_CHECKING:
     from twitchtools import TwitchCallBackBot
 
+# TODO: Figure out what I even did here
+
 def _show_diff(self, diff: Dict[str, List[ApplicationCommand]]) -> None:
     if TYPE_CHECKING:
         self: TwitchCallBackBot = self

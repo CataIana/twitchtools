@@ -68,10 +68,12 @@ class RecieverWebServer:
         h = hmac.new(secret.encode("utf-8"), hmac_message, hashlib.sha256)
         expected_signature = f"sha256={h.hexdigest()}"
         self.bot.log.debug(f"Timestamp: {timestamp}")
-        self.bot.log.debug(
-            f"Expected: {expected_signature}. Receieved: {signature}")
         if signature != expected_signature:
+            self.bot.log.debug(
+                f"Received unexpected signature. Expected: {expected_signature}. Receieved: {signature}")
             return False
+        else:
+            self.bot.log.debug(f"Received expected signature {signature}")
         notif_cache.append(message_id)
         await self.bot.db.write_notif_cache(notif_cache)
         return True
@@ -103,11 +105,11 @@ class RecieverWebServer:
                     f"[Youtube] Subscription failed: Not all arguments provided {e}")
                 return web.Response(status=404)
 
-            if mode == "subscribe" and secret == callback["secret"]:
+            if mode == "subscribe" and secret == callback.secret:
                 self.bot.dispatch(
                     "youtube_subscription_confirmation", verify_token)
                 self.bot.log.info(
-                    f"[Youtube] Subscription confirmed for {callback['display_name']}")
+                    f"[Youtube] Subscription confirmed for {callback.display_name}")
                 return web.Response(text=challenge)
         return web.Response(status=404)
 
@@ -122,8 +124,8 @@ class RecieverWebServer:
                 return web.Response(status=404)
             data = (await request.read()).decode('utf-8')
             self.bot.log.info(
-                f"[Youtube] Notification for {callback['display_name']}")
-            return await self.youtube_notification(PartialYoutubeUser(channel_id, callback["display_name"]), data)
+                f"[Youtube] Notification for {callback.display_name}")
+            return await self.youtube_notification(PartialYoutubeUser(channel_id, callback.display_name), data)
 
         else:
             callback = await self.bot.db.get_callback_by_id(channel_id)
@@ -134,9 +136,9 @@ class RecieverWebServer:
                         f"[Twitch] Request for {channel_id} not found")
                     return web.Response(status=400)
             channel = PartialUser(
-                channel_id, callback["display_name"].lower(), callback["display_name"])
+                channel_id, callback.display_name.lower(), callback.display_name)
 
-            verified = await self.verify_request(request, callback["secret"])
+            verified = await self.verify_request(request, callback.secret)
             if verified == False:
                 self.bot.log.info("[Twitch] Unverified request, ignoring")
                 return web.Response(status=400)
@@ -207,7 +209,6 @@ class RecieverWebServer:
         return web.Response(status=202)
 
     async def youtube_notification(self, channel: PartialYoutubeUser, data: str):
-        self.bot.test = (channel, data)
         video = await self.bot.yapi.parse_video_xml(channel, data)
 
         if video:
