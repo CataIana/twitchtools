@@ -50,72 +50,72 @@ def DiscordTimezone(utc, format: TimestampOptions):
     return f"<t:{int(utc)}:{format.value}>"
 
 
-async def eval_autocomplete(ctx: ApplicationCustomContext, com: str) -> list[str]:
-    if not await ctx.bot.is_owner(ctx.author):
-        return ["You do not have permission to use this command"]
-    # pyright: ignore[reportAssignmentType]
-    cog: CommandsCog | None = ctx.application_command.cog
-    if cog:
-        com = com.split("await ", 1)[-1]  # Strip await
-        try:
-            com_split = '.'.join(com.split(".")[:-1])
-            var_request = '.'.join(com.split(".")[-1:])
-            if com_split == '':
-                com_split = var_request
-                var_request = ""
-            resp = await cog.aeval(ctx, com_split)
-            if isinstance(resp, CoroutineType):
-                resp = await resp
-        except Exception as ex:
-            return ["May want to keep typing...", "Exception: ", str(ex), com]
-        else:
-            if type(resp) == str:
-                return [resp]
-            if type(resp) == dict:
-                resp = munchify(resp)
+# async def eval_autocomplete(ctx: ApplicationCustomContext, com: str) -> list[str]:
+#     if not await ctx.bot.is_owner(ctx.author):
+#         return ["You do not have permission to use this command"]
+#     # pyright: ignore[reportAssignmentType]
+#     cog: CommandsCog | None = ctx.application_command.cog
+#     if cog:
+#         com = com.split("await ", 1)[-1]  # Strip await
+#         try:
+#             com_split = '.'.join(com.split(".")[:-1])
+#             var_request = '.'.join(com.split(".")[-1:])
+#             if com_split == '':
+#                 com_split = var_request
+#                 var_request = ""
+#             resp = await cog.aeval(ctx, com_split)
+#             if isinstance(resp, CoroutineType):
+#                 resp = await resp
+#         except Exception as ex:
+#             return ["May want to keep typing...", "Exception: ", str(ex), com]
+#         else:
+#             if type(resp) == str:
+#                 return [resp]
+#             if type(resp) == dict:
+#                 resp = munchify(resp)
 
-            attributes = []  # List of all attributes
-            # get a list of all attributes and their values, along with all the functions in seperate lists
-            for attr_name in dir(resp):
-                try:
-                    attr = getattr(resp, attr_name)
-                except AttributeError:
-                    continue
-                if attr_name.startswith("_"):
-                    continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
-                if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
-                    if var_request:
-                        if not str(attr_name).startswith(var_request):
-                            continue
-                    if isinstance(attr, (list, deque)):
-                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
-                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    elif type(attr) == set:
-                        attr_ = list(attr)
-                        attributes.append(shorten(com_split + "." + cog.remove_tokens(
-                            f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
-                    else:
-                        b = com_split + "." + \
-                            cog.remove_tokens(
-                                str(attr_name)) + ": {} [" + type(attr).__name__ + "]"
-                        attributes.append(
-                            b.format(str(attr)[:100-len(b)-5] + " [...]"))
-                else:
-                    if var_request:
-                        if not str(attr_name).startswith(var_request):
-                            continue
-                    if asyncio.iscoroutinefunction(attr):
-                        attributes.append(shorten(
-                            com_split + "." + f"{str(attr_name)}: [async {type(attr).__name__}]", width=100))
-                    else:
-                        attributes.append(shorten(
-                            com_split + "." + f"{str(attr_name)}: [{type(attr).__name__}]", width=100))
-            return attributes[:25]
-    else:
-        return []
+#             attributes = []  # List of all attributes
+#             # get a list of all attributes and their values, along with all the functions in seperate lists
+#             for attr_name in dir(resp):
+#                 try:
+#                     attr = getattr(resp, attr_name)
+#                 except AttributeError:
+#                     continue
+#                 if attr_name.startswith("_"):
+#                     continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
+#                 if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
+#                     if var_request:
+#                         if not str(attr_name).startswith(var_request):
+#                             continue
+#                     if isinstance(attr, (list, deque)):
+#                         attributes.append(shorten(com_split + "." + cog.remove_tokens(
+#                             f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+#                     elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
+#                         attributes.append(shorten(com_split + "." + cog.remove_tokens(
+#                             f"{str(attr_name)}: {type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+#                     elif type(attr) == set:
+#                         attr_ = list(attr)
+#                         attributes.append(shorten(com_split + "." + cog.remove_tokens(
+#                             f"{str(attr_name)}: {type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"), width=100))
+#                     else:
+#                         b = com_split + "." + \
+#                             cog.remove_tokens(
+#                                 str(attr_name)) + ": {} [" + type(attr).__name__ + "]"
+#                         attributes.append(
+#                             b.format(str(attr)[:100-len(b)-5] + " [...]"))
+#                 else:
+#                     if var_request:
+#                         if not str(attr_name).startswith(var_request):
+#                             continue
+#                     if asyncio.iscoroutinefunction(attr):
+#                         attributes.append(shorten(
+#                             com_split + "." + f"{str(attr_name)}: [async {type(attr).__name__}]", width=100))
+#                     else:
+#                         attributes.append(shorten(
+#                             com_split + "." + f"{str(attr_name)}: [{type(attr).__name__}]", width=100))
+#             return attributes[:25]
+#     else:
+#         return []
 
 
 # Autocompleters
@@ -223,102 +223,102 @@ class CommandsCog(commands.Cog):
             string = string.replace(var, "<Hidden>")
         return string
 
-    @commands.slash_command(description="Evalute a string as a command")
-    @commands.is_owner()
-    async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True, show_all: bool = False):
-        command = command.split(":")[0]
-        code_string = "```nim\n{}```"
-        if command.startswith("`") and command.endswith("`"):
-            command = command[1:][:-1]
-        start = time()
-        try:
-            resp = await self.aeval(ctx, command)
-            if isinstance(resp, CoroutineType):
-                resp = await resp
-        except Exception as ex:
-            await ctx.send(content=f"Exception Occurred: `{type(ex).__name__}: {ex}`")
-        else:
-            finish = time()
-            if respond:
-                if type(resp) == str:
-                    return await ctx.send(code_string.format(resp))
+    # @commands.slash_command(description="Evalute a string as a command")
+    # @commands.is_owner()
+    # async def eval(self, ctx: ApplicationCustomContext, command: str = commands.Param(autocomplete=eval_autocomplete), respond: bool = True, show_all: bool = False):
+    #     command = command.split(":")[0]
+    #     code_string = "```nim\n{}```"
+    #     if command.startswith("`") and command.endswith("`"):
+    #         command = command[1:][:-1]
+    #     start = time()
+    #     try:
+    #         resp = await self.aeval(ctx, command)
+    #         if isinstance(resp, CoroutineType):
+    #             resp = await resp
+    #     except Exception as ex:
+    #         await ctx.send(content=f"Exception Occurred: `{type(ex).__name__}: {ex}`")
+    #     else:
+    #         finish = time()
+    #         if respond:
+    #             if type(resp) == str:
+    #                 return await ctx.send(code_string.format(resp))
 
-                attributes = {}  # Dict of all attributes
-                methods = []  # Sync methods
-                amethods = []  # Async methods
-                # get a list of all attributes and their values, along with all the functions in seperate lists
-                for attr_name in dir(resp):
-                    try:
-                        attr = getattr(resp, attr_name)
-                    except AttributeError:
-                        continue
-                    if not show_all:
-                        if attr_name.startswith("_"):
-                            continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
-                    if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
-                        if isinstance(attr, (list, deque)):
-                            attributes[str(
-                                attr_name)] = f"{type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"
-                        elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
-                            attributes[str(
-                                attr_name)] = f"{type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"
-                        elif type(attr) == set:
-                            attr_ = list(attr)
-                            attributes[str(
-                                attr_name)] = f"{type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"
-                        else:
-                            attributes[str(attr_name)
-                                       ] = f"{attr} [{type(attr).__name__}]"
-                    else:
-                        if asyncio.iscoroutinefunction(attr):
-                            amethods.append(attr_name)
-                        else:
-                            methods.append(attr_name)
+    #             attributes = {}  # Dict of all attributes
+    #             methods = []  # Sync methods
+    #             amethods = []  # Async methods
+    #             # get a list of all attributes and their values, along with all the functions in seperate lists
+    #             for attr_name in dir(resp):
+    #                 try:
+    #                     attr = getattr(resp, attr_name)
+    #                 except AttributeError:
+    #                     continue
+    #                 if not show_all:
+    #                     if attr_name.startswith("_"):
+    #                         continue  # Most methods/attributes starting with __ or _ are generally unwanted, skip them
+    #                 if type(attr) not in [MethodType, BuiltinFunctionType, FunctionType]:
+    #                     if isinstance(attr, (list, deque)):
+    #                         attributes[str(
+    #                             attr_name)] = f"{type(attr).__name__.title()}[{type(attr[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"
+    #                     elif isinstance(attr, (dict, commands.core._CaseInsensitiveDict, Mapping)):
+    #                         attributes[str(
+    #                             attr_name)] = f"{type(attr).__name__.title()}[{type(list(attr.keys())[0]).__name__ if len(attr) != 0 else 'None'}, {type(list(attr.values())[0]).__name__ if len(attr) != 0 else 'None'}] [{len(attr)}]"
+    #                     elif type(attr) == set:
+    #                         attr_ = list(attr)
+    #                         attributes[str(
+    #                             attr_name)] = f"{type(attr).__name__.title()}[{type(attr_[0]).__name__.title() if len(attr) != 0 else 'None'}] [{len(attr)}]"
+    #                     else:
+    #                         attributes[str(attr_name)
+    #                                    ] = f"{attr} [{type(attr).__name__}]"
+    #                 else:
+    #                     if asyncio.iscoroutinefunction(attr):
+    #                         amethods.append(attr_name)
+    #                     else:
+    #                         methods.append(attr_name)
 
-                # Form the long ass string of everything
-                return_string = []
-                if type(resp) != list:
-                    stred = str(resp)
-                else:
-                    stred = '\n'.join([str(r) for r in resp])
-                # List return type, it's str value
-                return_string += [f"Type: {type(resp).__name__}",
-                                  f"String: {stred}"]
-                if attributes != {}:
-                    return_string += ["", "Attributes: "]
-                    return_string += [self.remove_tokens(
-                        f"{x+': ':20s}{shorten(y, width=(106-len(x)))}") for x, y in attributes.items()]
+    #             # Form the long ass string of everything
+    #             return_string = []
+    #             if type(resp) != list:
+    #                 stred = str(resp)
+    #             else:
+    #                 stred = '\n'.join([str(r) for r in resp])
+    #             # List return type, it's str value
+    #             return_string += [f"Type: {type(resp).__name__}",
+    #                               f"String: {stred}"]
+    #             if attributes != {}:
+    #                 return_string += ["", "Attributes: "]
+    #                 return_string += [self.remove_tokens(
+    #                     f"{x+': ':20s}{shorten(y, width=(106-len(x)))}") for x, y in attributes.items()]
 
-                if methods != []:
-                    return_string.append("\nMethods:")
-                    return_string.append(
-                        ', '.join([method for method in methods]).rstrip(", "))
+    #             if methods != []:
+    #                 return_string.append("\nMethods:")
+    #                 return_string.append(
+    #                     ', '.join([method for method in methods]).rstrip(", "))
 
-                if amethods != []:
-                    return_string.append("\nAsync/Awaitable Methods:")
-                    return_string.append(
-                        ', '.join([method for method in amethods]).rstrip(", "))
+    #             if amethods != []:
+    #                 return_string.append("\nAsync/Awaitable Methods:")
+    #                 return_string.append(
+    #                     ', '.join([method for method in amethods]).rstrip(", "))
 
-                return_string.append(
-                    f"\nTook {((finish-start)*1000):2f}ms to process eval")
+    #             return_string.append(
+    #                 f"\nTook {((finish-start)*1000):2f}ms to process eval")
 
-                d_str = ""
-                for x in return_string:
-                    if len(d_str + f"{x.rstrip(', ')}\n") < 1990:
-                        d_str += f"{x.rstrip(', ')}\n"
-                    else:
-                        if len(code_string.format(d_str)) > 2000:
-                            while d_str != "":
-                                await ctx.send(code_string.format(d_str[:1990]))
-                                d_str = d_str[1990:]
-                        else:
-                            await ctx.send(code_string.format(d_str))
-                        d_str = f"{x.rstrip(', ')}\n"
-                if d_str != "":
-                    try:
-                        await ctx.send(code_string.format(d_str))
-                    except disnake.errors.NotFound:
-                        pass
+    #             d_str = ""
+    #             for x in return_string:
+    #                 if len(d_str + f"{x.rstrip(', ')}\n") < 1990:
+    #                     d_str += f"{x.rstrip(', ')}\n"
+    #                 else:
+    #                     if len(code_string.format(d_str)) > 2000:
+    #                         while d_str != "":
+    #                             await ctx.send(code_string.format(d_str[:1990]))
+    #                             d_str = d_str[1990:]
+    #                     else:
+    #                         await ctx.send(code_string.format(d_str))
+    #                     d_str = f"{x.rstrip(', ')}\n"
+    #             if d_str != "":
+    #                 try:
+    #                     await ctx.send(code_string.format(d_str))
+    #                 except disnake.errors.NotFound:
+    #                     pass
 
     @commands.slash_command(name="managerrole")
     @has_guild_permissions(owner_override=True, administrator=True)
