@@ -166,7 +166,7 @@ class DB(commands.Cog, name="Database Cog"):
         await self.check_connect()
         return await self._db.tcallbacks.find_one_and_delete({"_id": str(broadcaster.id)})
 
-    async def get_channel_cache(self, broadcaster: PartialUser) -> Optional[ChannelCache]:
+    async def get_channel_cache(self, broadcaster: PartialUser) -> ChannelCache:
         await self.check_connect()
         channel_cache = await self._db.ccache.find_one({"_id": str(broadcaster.id)})
         if channel_cache:
@@ -285,7 +285,7 @@ class DB(commands.Cog, name="Database Cog"):
         if result.matched_count == 0:
             await self._db.yt_cache.insert_one({"_id": video.channel.id, "video_id": video.id, "publish_time": video.published_at.timestamp()})
 
-    async def get_yt_channel_cache(self, channel: PartialYoutubeUser) -> Optional[YoutubeChannelCache]:
+    async def get_yt_channel_cache(self, channel: PartialYoutubeUser) -> YoutubeChannelCache:
         await self.check_connect()
         channel_cache = await self._db.yt_ccache.find_one({"_id": channel.id})
         if channel_cache:

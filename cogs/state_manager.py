@@ -249,7 +249,7 @@ class StreamStateManager(commands.Cog):
             if guild is None:
                 continue
 
-            user_escaped = item.user.display_name.replace('_', '\_')
+            user_escaped = item.user.display_name.replace('_', r'\_')
 
             if isinstance(item, YoutubeVideo):
                 if item.type == YoutubeVideoType.premiere and not alert_info.enable_premieres:
@@ -296,7 +296,7 @@ class StreamStateManager(commands.Cog):
                             else:
                                 try:
                                     user_escaped = item.user.display_name.replace(
-                                        '_', '\_')
+                                        '_', r'\_')
                                     live_alert = await alert_message.edit(content=alert_info.get("custom_message", message)+role_mention, embed=embed)
                                     live_alerts.append(
                                         {"channel": live_alert.channel.id, "message": live_alert.id})
@@ -322,7 +322,7 @@ class StreamStateManager(commands.Cog):
                         channel = await guild.create_text_channel(f"🔴{item.user.display_name.lower()}", overwrites=NewChannelOverrides, position=0)
                         if channel:
                             user_escaped = item.user.display_name.replace(
-                                '_', '\_')
+                                '_', r'\_')
                             await channel.send(f"{user_escaped} is live! {link}")
                             live_channels.append(channel.id)
                     except disnake.Forbidden:
@@ -480,7 +480,7 @@ class StreamStateManager(commands.Cog):
                 except disnake.Forbidden:  # In case something weird happens
                     continue
 
-    def get_stream_embed(self, item: Union[Stream, YoutubeVideo], **kwargs) -> disnake.Embed:
+    def get_stream_embed(self, item: Union[Stream, TitleEvent, YoutubeVideo], **kwargs) -> disnake.Embed:
         if isinstance(item, Stream):
             embed = disnake.Embed(
                 title=item.title, url=f"https://twitch.tv/{item.user.name}",
