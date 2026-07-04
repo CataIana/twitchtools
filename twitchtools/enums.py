@@ -344,8 +344,10 @@ class ChannelCache(Enum):
     is_live: bool
     live_channels: list[int]
     live_alerts: dict[str, int]
-    last_update: int
+    last_game_update: int
+    last_title_update: int
     games: dict[str, int]
+    titles: dict[str, int]
     reusable_alerts: list[dict[str, int]]
 
 

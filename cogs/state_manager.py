@@ -47,7 +47,7 @@ class StreamStateManager(commands.Cog):
         await self.bot.db.write_title_cache(event.broadcaster, title_cache)
 
         if stream := await self.bot.tapi.get_stream(event.broadcaster.username, origin=AlertOrigin.callback):
-            return await self.title_change_update_alerts(event, stream, old_game)
+            return await self.title_change_update_alerts(event, stream, old_game, old_title)
 
         if not title_callback: return
 
@@ -104,7 +104,9 @@ class StreamStateManager(commands.Cog):
         channel_cache.pop("stream_id", None)
         channel_cache.is_live = False
         channel_cache.pop("games", None)
-        channel_cache.pop("last_update", None)
+        channel_cache.pop("titles", None)
+        channel_cache.pop("last_game_update", None)
+        channel_cache.pop("last_title_update", None)
 
         # Update cache
         await self.bot.db.write_channel_cache(streamer, channel_cache)
@@ -170,8 +172,10 @@ class StreamStateManager(commands.Cog):
             "is_live": True,
             "live_channels": live_channels,
             "live_alerts": live_alerts,
-            "last_update": int(time()),
-            "games": {stream.game_name: 0}
+            "last_title_update": int(time()),
+            "last_game_update": int(time()),
+            "games": {stream.game_name: 0},
+            "titles": {stream.title: 0}
         }
 
         # await write_channel_cache(channel_cache)
@@ -434,13 +438,17 @@ class StreamStateManager(commands.Cog):
 
                     # List the last 5 games played in the embed
                     if games := channel_cache.get("games", None): 
+                        games: dict[str, int]
                         if len(games) == 1:
                             past_games = f"Was streaming {extracted_game} for {human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
                         else:
-                            sliced_games = {key: games[key] for key in list(games.keys())[:5]}
-                            sliced_games[list(sliced_games.keys())[-1]] += int(time()) - channel_cache.last_update
+                            time_corrected_games = dict(games)
+                            time_corrected_games[list(time_corrected_games.keys())[-1]] += int(time()) - channel_cache.last_game_update
+
+                            length_filtered_games = {k: v for k, v in time_corrected_games.items() if v >= 300}
+                            sliced_filtered_games = {key: length_filtered_games[key] for key in list(length_filtered_games.keys())[-5:]}
                             past_games_list = []
-                            for game_name, length in sliced_games.items():
+                            for game_name, length in sliced_filtered_games.items():
                                 if length == 0:
                                     continue
                                 past_games_list.append(
@@ -452,7 +460,30 @@ class StreamStateManager(commands.Cog):
                         self.bot.log.warning(
                             "Using fallback game extraction")
                         past_games = f"Was streaming {extracted_game} for ~{human_timedelta(end_time, source=embed.timestamp, accuracy=2)}"
-                    embed.description = past_games
+                        
+                    # Display the last 5 titles used that were used for more than 5 minutes
+                    if titles := channel_cache.get("titles", None):
+                        titles: dict[str, int]
+                        if len(titles) == 1:
+                            past_titles = ""
+                        else:
+                            time_corrected_titles = dict(titles)
+                            time_corrected_titles[list(time_corrected_titles.keys())[-1]] += int(time()) - channel_cache.last_title_update
+                            length_filtered_titles = {k: v for k, v in time_corrected_titles.items() if v >= 300}
+
+                            sliced_filtered_titles = {key: length_filtered_titles[key] for key in list(length_filtered_titles.keys())[-5:]}
+                            past_titles_list = []
+                            for title, length in sliced_filtered_titles.items():
+                                if length == 0:
+                                    continue
+                                past_titles_list.append(
+                                    f"{title} for ~{human_timedelta(embed.timestamp+timedelta(seconds=length), source=embed.timestamp, accuracy=2)}")
+                            extra = " (5 most recent)" if len(games) > 5 else ""
+                            past_titles = f"\n\nOther titles{extra}:" + "\n" + ',\n'.join(past_titles_list)
+                    else:
+                        past_titles = ""
+
+                    embed.description = past_games + past_titles
                     try:
                         await message.edit(content=f"{streamer.display_name} is now offline", embed=embed)
                     except disnake.Forbidden:
@@ -507,26 +538,47 @@ class StreamStateManager(commands.Cog):
         
         embed.set_footer(text="Mew")
         return embed
-    
-    async def title_change_update_alerts(self, event: TitleEvent, stream: Stream, old_game: str):
+
+    async def title_change_update_alerts(self, event: TitleEvent, stream: Stream, old_game: str, old_title: str):
         await self.bot.ratelimit_request(event.broadcaster)
         # channel_cache = await get_channel_cache()
         channel_cache = await self.bot.db.get_channel_cache(stream.user)
-        stream.user = await self.bot.tapi.get_user(user=stream.user)
+        stream_user = await self.bot.tapi.get_user(user=stream.user)
+        if stream_user:
+            stream.user = stream_user
         embed = self.get_stream_embed(event, stream=stream)        
         await self.update_alert_messages(channel_cache, embed)
 
+        should_write_to_db = False
+
         # Add new game to games list if applicable
         if channel_cache.get("games", None) and event.game != old_game:
+            # If the game was already in cache, remove it and add that time to the new time
             old_time = channel_cache.games.get(event.game_name, 0)
             if event.game_name in channel_cache.games.keys():
                 channel_cache.games.pop(event.game_name, None)
             if channel_cache.games.get(old_game, None) != None:
                 channel_cache.games[old_game] = (
-                    int(time()) - channel_cache.last_update) + old_time
+                    int(time()) - channel_cache.last_game_update) + old_time
             channel_cache.games[event.game_name] = old_time
-            channel_cache.last_update = int(time())
+            channel_cache.last_game_update = int(time())
+            should_write_to_db = True
+
+        # Store titles in cache to be displayed once offline
+        if channel_cache.get("titles", None) and event.title != old_title:
+            old_title_time = channel_cache.titles.get(event.title, 0)
+            if event.title in channel_cache.titles.keys():
+                channel_cache.titles.pop(event.title, None)
+            if channel_cache.titles.get(old_title, None) != None:
+                channel_cache.titles[old_title] = (
+                    int(time()) - channel_cache.last_title_update) + old_title_time
+            channel_cache.titles[event.title] = old_title_time
+            channel_cache.last_title_update = int(time())
+            should_write_to_db = True
+
+        if should_write_to_db:
             await self.bot.db.write_channel_cache(stream.user, channel_cache)
+
 
 def setup(bot):
     bot.add_cog(StreamStateManager(bot))
